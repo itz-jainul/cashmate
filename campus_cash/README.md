@@ -36,10 +36,10 @@ lib/
 ├── features/
 │   ├── auth/                       # Firebase Auth, Login, Register, Forgot Password
 │   ├── home/                       # Home Dashboard & Navigation
-│   ├── exchange/                   # Request Creation, Atomic Matching Engine, Handshake
+│   ├── exchange/                   # Request Creation, Atomic Matching Engine, Handshake, Meetup Chat
 │   ├── history/                    # Previous Exchanges List
 │   └── profile/                    # User Profile, Rating, & Settings
-└── models/                         # UserModel, ExchangeRequestModel, ExchangeModel
+└── models/                         # UserModel, ExchangeRequestModel, ExchangeModel, ChatMessageModel
 ```
 
 ---

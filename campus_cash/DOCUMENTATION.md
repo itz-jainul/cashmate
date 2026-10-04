@@ -65,8 +65,9 @@ In collegiate environments, students frequently encounter cash-flow friction:
 
 ## 8. Database Design
 - **`users/{userId}`**: Stores profile metadata (`name`, `email`, `completedExchanges`, `rating`, `createdAt`).
-- **`exchangeRequests/{requestId}`**: Stores active exchange requests (`has`, `wants`, `amount`, `status`, `matchedUserId`, `matchedRequestId`, `userAccepted`, `expiresAt`).
+- **`exchangeRequests/{requestId}`**: Stores active exchange requests (`has`, `wants`, `amount`, `status`, `matchedUserId`, `matchedRequestId`, `userAccepted`, `expiresAt`, `location`).
 - **`exchanges/{exchangeId}`**: Historical record of completed exchanges (`userAId`, `userBId`, `amount`, `userAHas`, `userBHas`, `status`, `completedAt`).
+- **`exchangeChats/{chatId}/messages/{messageId}`**: Real-time meetup coordination chat and 1-tap quick status pings without sharing personal phone numbers.
 - **`notifications/{notificationId}`**: Realtime notifications for match found and completion alerts.
 
 ## 9. Matching Algorithm & Concurrency Model

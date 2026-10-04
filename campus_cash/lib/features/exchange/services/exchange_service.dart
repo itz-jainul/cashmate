@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../models/chat_message_model.dart';
 import '../../../models/exchange_model.dart';
 import '../../../models/exchange_request_model.dart';
 
@@ -440,4 +441,48 @@ class ExchangeService {
         .snapshots()
         .map((snap) => snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
   }
+
+  // Helper to compute deterministic chat ID between two requests
+  static String getChatId(String idA, String idB) {
+    return idA.compareTo(idB) < 0 ? '${idA}_$idB' : '${idB}_$idA';
+  }
+
+  CollectionReference<Map<String, dynamic>> _chatMessagesCol(String chatId) =>
+      _firestore.collection('exchangeChats').doc(chatId).collection('messages');
+
+  // Stream messages for a specific meetup coordination chat
+  Stream<List<ChatMessageModel>> streamChatMessages(String chatId) {
+    return _chatMessagesCol(chatId)
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => ChatMessageModel.fromFirestore(doc))
+            .toList());
+  }
+
+  // Send a coordination message or quick status ping
+  Future<void> sendChatMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required String text,
+    bool isQuickPing = false,
+  }) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+
+    final now = DateTime.now();
+    final docRef = _chatMessagesCol(chatId).doc();
+    final msg = ChatMessageModel(
+      id: docRef.id,
+      senderId: senderId,
+      senderName: senderName,
+      text: trimmed,
+      isQuickPing: isQuickPing,
+      createdAt: now,
+    );
+
+    await docRef.set(msg.toMap());
+  }
 }
+

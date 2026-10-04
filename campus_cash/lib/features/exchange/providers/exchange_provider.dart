@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../models/chat_message_model.dart';
 import '../../../models/exchange_model.dart';
 import '../../../models/exchange_request_model.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -48,3 +49,9 @@ final notificationsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   final service = ref.watch(exchangeServiceProvider);
   return service.streamNotifications(user.uid);
 });
+
+final chatMessagesProvider = StreamProvider.family<List<ChatMessageModel>, String>((ref, chatId) {
+  final service = ref.watch(exchangeServiceProvider);
+  return service.streamChatMessages(chatId);
+});
+

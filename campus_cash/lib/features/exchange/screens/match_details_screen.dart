@@ -6,6 +6,8 @@ import '../../../core/widgets/status_badge.dart';
 import '../../../models/exchange_request_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/exchange_provider.dart';
+import '../services/exchange_service.dart';
+import '../widgets/meetup_chat_widget.dart';
 
 class MatchDetailsScreen extends ConsumerStatefulWidget {
   final ExchangeRequestModel request;
@@ -175,6 +177,7 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
   Widget build(BuildContext context) {
     final requestAsync = ref.watch(requestByIdProvider(widget.request.id));
     final req = requestAsync.value ?? widget.request;
+    final currentUser = ref.watch(authStateProvider).value;
 
     final isAccepted = req.status == ExchangeStatus.accepted;
     final isCompleted = req.status == ExchangeStatus.completed;
@@ -367,6 +370,19 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
+              // Live Meetup Coordination Chat
+              if (req.matchedRequestId != null && currentUser != null) ...[
+                MeetupChatWidget(
+                  chatId: ExchangeService.getChatId(req.id, req.matchedRequestId!),
+                  currentUserId: currentUser.uid,
+                  currentUserName: currentUser.displayName?.isNotEmpty == true
+                      ? currentUser.displayName!
+                      : (currentUser.email?.split('@').first ?? 'Student'),
+                  isReadOnly: isCompleted,
+                  location: req.location,
+                ),
+                const SizedBox(height: 24),
+              ],
               // Step-by-Step Offline Guidance (Phases 14 & 15)
               if (isAccepted) ...[
                 const Text(
