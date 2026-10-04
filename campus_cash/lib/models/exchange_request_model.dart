@@ -40,6 +40,7 @@ class ExchangeRequestModel {
   final ExchangeStatus status;
   final String? matchedUserId;
   final String? matchedRequestId;
+  final String? connectionId;
   final bool userAccepted;
   final bool matchedUserAccepted;
   final bool userConfirmed;
@@ -59,6 +60,7 @@ class ExchangeRequestModel {
     this.status = ExchangeStatus.searching,
     this.matchedUserId,
     this.matchedRequestId,
+    this.connectionId,
     this.userAccepted = false,
     this.matchedUserAccepted = false,
     this.userConfirmed = false,
@@ -93,6 +95,7 @@ class ExchangeRequestModel {
       status: ExchangeStatus.fromString(data['status']),
       matchedUserId: data['matchedUserId'],
       matchedRequestId: data['matchedRequestId'],
+      connectionId: data['connectionId'],
       userAccepted: data['userAccepted'] ?? false,
       matchedUserAccepted: data['matchedUserAccepted'] ?? false,
       userConfirmed: data['userConfirmed'] ?? false,
@@ -114,6 +117,7 @@ class ExchangeRequestModel {
       'status': status.value,
       'matchedUserId': matchedUserId,
       'matchedRequestId': matchedRequestId,
+      'connectionId': connectionId,
       'userAccepted': userAccepted,
       'matchedUserAccepted': matchedUserAccepted,
       'userConfirmed': userConfirmed,
@@ -135,6 +139,7 @@ class ExchangeRequestModel {
     ExchangeStatus? status,
     String? matchedUserId,
     String? matchedRequestId,
+    String? connectionId,
     bool? userAccepted,
     bool? matchedUserAccepted,
     bool? userConfirmed,
@@ -154,6 +159,7 @@ class ExchangeRequestModel {
       status: status ?? this.status,
       matchedUserId: matchedUserId ?? this.matchedUserId,
       matchedRequestId: matchedRequestId ?? this.matchedRequestId,
+      connectionId: connectionId ?? this.connectionId,
       userAccepted: userAccepted ?? this.userAccepted,
       matchedUserAccepted: matchedUserAccepted ?? this.matchedUserAccepted,
       userConfirmed: userConfirmed ?? this.userConfirmed,

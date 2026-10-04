@@ -4,11 +4,12 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../models/connection_model.dart';
 import '../../../models/exchange_request_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../exchange/providers/exchange_provider.dart';
+import '../../exchange/screens/connection_details_screen.dart';
 import '../../exchange/screens/create_request_screen.dart';
-import '../../exchange/screens/match_details_screen.dart';
 import '../../exchange/screens/searching_match_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -18,8 +19,10 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(userProfileProvider);
     final activeRequestAsync = ref.watch(activeRequestProvider);
+    final connectionsAsync = ref.watch(userConnectionsProvider);
+    final currentUserId = ref.watch(authStateProvider).value?.uid ?? '';
 
-    final userName = profileAsync.value?.name ?? 'Student';
+    final userName = profileAsync.value?.name ?? 'Friend';
 
     return Scaffold(
       body: SafeArea(
@@ -28,54 +31,83 @@ class HomeScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // CashMate App Brand Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${AppStrings.greetingPrefix}$userName 👋',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                            letterSpacing: -0.5,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.currency_exchange_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          AppStrings.homeSubtitle,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
+                          const SizedBox(width: 8),
+                          const Text(
+                            AppStrings.appName,
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimary,
+                              letterSpacing: -0.5,
+                            ),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        AppStrings.appTagline,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: AppColors.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Icon(
-                      Icons.currency_exchange_rounded,
-                      color: AppColors.primary,
-                      size: 24,
+                    child: Text(
+                      'Hi, $userName 👋',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+
+              // Create Request Primary Action
+              CustomButton(
+                text: '+ Create Exchange Request',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CreateRequestScreen()),
+                  );
+                },
+              ),
               const SizedBox(height: 28),
 
-              // Active Request Section
+              // Your Request Section
               const Text(
-                AppStrings.activeRequest,
+                'Your Request',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -91,7 +123,7 @@ class HomeScreen extends ConsumerWidget {
                   return _buildActiveRequestCard(context, req);
                 },
                 loading: () => Container(
-                  height: 120,
+                  height: 110,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
@@ -109,9 +141,9 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
-              // Primary Actions
+              // Quick Post Need Tiles
               const Text(
                 'What do you need?',
                 style: TextStyle(
@@ -120,8 +152,7 @@ class HomeScreen extends ConsumerWidget {
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 14),
-
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -132,7 +163,6 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.payments_rounded,
                       color: AppColors.cashColor,
                       bgColor: AppColors.cashBg,
-                      hasActiveReq: activeRequestAsync.value != null,
                       onTap: () {
                         Navigator.push(
                           context,
@@ -143,7 +173,7 @@ class HomeScreen extends ConsumerWidget {
                       },
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: _buildActionTile(
                       context: context,
@@ -152,7 +182,6 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.phone_android_rounded,
                       color: AppColors.digitalColor,
                       bgColor: AppColors.digitalBg,
-                      hasActiveReq: activeRequestAsync.value != null,
                       onTap: () {
                         Navigator.push(
                           context,
@@ -166,36 +195,137 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
-              // How It Works Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
+              // Recent Connections Section
+              const Text(
+                'Recent Matches & Connections',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              connectionsAsync.when(
+                data: (conns) {
+                  if (conns.isEmpty) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: const Column(
                         children: [
-                          Icon(Icons.info_outline, size: 20, color: AppColors.primary),
-                          SizedBox(width: 8),
+                          Icon(Icons.handshake_outlined,
+                              size: 32, color: AppColors.textMuted),
+                          SizedBox(height: 8),
                           Text(
-                            'How CampusCash Works',
+                            'No recent matches yet',
                             style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
                             ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'When an exact opposite request appears, CashMate matches you automatically.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      _buildBulletPoint('1. Create a request with the amount you have.'),
-                      _buildBulletPoint('2. CampusCash pairs you with someone who has the opposite need.'),
-                      _buildBulletPoint('3. Meet in a safe campus spot and exchange outside the app.'),
-                      _buildBulletPoint('4. Confirm exchange in the app to record it in history.'),
-                    ],
-                  ),
+                    );
+                  }
+
+                  return Column(
+                    children: conns.take(3).map((conn) {
+                      final partnerName = conn.partnerName(currentUserId);
+                      final myGive = conn.myHas(currentUserId);
+                      final myReceive = conn.myWants(currentUserId);
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: ListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          leading: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: AppColors.primaryContainer,
+                            child: const Icon(
+                              Icons.person_rounded,
+                              size: 20,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text(
+                                partnerName,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildStatusPill(conn.status),
+                            ],
+                          ),
+                          subtitle: Text(
+                            '₹${conn.amount} • ${myGive.toUpperCase()} ↔ ${myReceive.toUpperCase()}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ConnectionDetailsScreen(
+                                  connectionId: conn.id,
+                                  initialConnection: conn,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Text('Error: $e'),
+              ),
+
+              const SizedBox(height: 28),
+
+              // Safety Reminder Banner
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.security_rounded, size: 20, color: Color(0xFFB45309)),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'CashMate does not transfer or hold money. The actual exchange happens directly between users outside the app. Never share UPI PIN, passwords, or OTPs.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF92400E),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -216,28 +346,21 @@ class HomeScreen extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.currency_exchange_outlined, size: 40, color: AppColors.textMuted),
-          const SizedBox(height: 12),
+          const Icon(Icons.currency_exchange_outlined, size: 36, color: AppColors.textMuted),
+          const SizedBox(height: 8),
           const Text(
-            AppStrings.noActiveRequest,
+            'No active request',
             style: TextStyle(
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: 180,
-            child: CustomButton(
-              text: AppStrings.createRequest,
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CreateRequestScreen()),
-                );
-              },
-            ),
+          const SizedBox(height: 4),
+          const Text(
+            'Post what you have and what you need to find an exact peer match.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
           ),
         ],
       ),
@@ -245,36 +368,37 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildActiveRequestCard(BuildContext context, ExchangeRequestModel req) {
+    final isSearching = req.status == ExchangeStatus.searching;
     return GestureDetector(
       onTap: () {
-        if (req.status == ExchangeStatus.searching) {
+        if (isSearching) {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => SearchingMatchScreen(initialRequest: req),
             ),
           );
-        } else {
+        } else if (req.connectionId != null) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => MatchDetailsScreen(request: req),
+              builder: (_) => ConnectionDetailsScreen(connectionId: req.connectionId!),
             ),
           );
         }
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.primary, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: AppColors.primary.withValues(alpha: 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -287,7 +411,7 @@ class HomeScreen extends ConsumerWidget {
                 Text(
                   '₹${req.amount}',
                   style: const TextStyle(
-                    fontSize: 28,
+                    fontSize: 26,
                     fontWeight: FontWeight.w900,
                     color: AppColors.textPrimary,
                   ),
@@ -296,23 +420,24 @@ class HomeScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
+            Text(
+              '${req.has.toUpperCase()} → ${req.wants.toUpperCase()}',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 12),
             Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Text(
-                  '${req.has.toUpperCase()} → ${req.wants.toUpperCase()}',
+                  isSearching ? 'View Live Search →' : 'View Connection →',
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: AppColors.primary,
-                  ),
-                ),
-                const Spacer(),
-                const Text(
-                  'Tap to manage ›',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
                   ),
                 ),
               ],
@@ -330,24 +455,15 @@ class HomeScreen extends ConsumerWidget {
     required IconData icon,
     required Color color,
     required Color bgColor,
-    required bool hasActiveReq,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap: hasActiveReq
-          ? () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('You already have an active request. Complete or cancel it first.'),
-                ),
-              );
-            }
-          : onTap,
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
         ),
         child: Column(
@@ -361,19 +477,22 @@ class HomeScreen extends ConsumerWidget {
               ),
               child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Text(
               title,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               subtitle,
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted,
+              ),
             ),
           ],
         ),
@@ -381,15 +500,46 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBulletPoint(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+  Widget _buildStatusPill(ConnectionStatus status) {
+    Color bg;
+    Color fg;
+    String label;
+
+    switch (status) {
+      case ConnectionStatus.pending:
+        bg = AppColors.statusSearchingBg;
+        fg = AppColors.statusSearching;
+        label = 'Pending';
+        break;
+      case ConnectionStatus.connected:
+        bg = AppColors.primaryContainer;
+        fg = AppColors.primary;
+        label = 'Connected ✓';
+        break;
+      case ConnectionStatus.completed:
+        bg = AppColors.statusCompletedBg;
+        fg = AppColors.statusCompleted;
+        label = 'Completed ✓';
+        break;
+      case ConnectionStatus.cancelled:
+        bg = AppColors.statusCancelledBg;
+        fg = AppColors.statusCancelled;
+        label = 'Cancelled';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          color: AppColors.textSecondary,
-          height: 1.4,
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: fg,
         ),
       ),
     );

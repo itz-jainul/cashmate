@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../exchange/screens/connections_screen.dart';
 import '../../exchange/screens/requests_screen.dart';
-import '../../history/screens/history_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import 'home_screen.dart';
 
@@ -17,7 +17,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final List<Widget> _screens = const [
     HomeScreen(),
     RequestsScreen(),
-    HistoryScreen(),
+    ConnectionsScreen(),
     ProfileScreen(),
   ];
 
@@ -45,9 +45,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             label: 'Requests',
           ),
           NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history_rounded),
-            label: 'History',
+            icon: Icon(Icons.handshake_outlined),
+            selectedIcon: Icon(Icons.handshake_rounded),
+            label: 'Connections',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

@@ -18,7 +18,7 @@ class ProfileScreen extends ConsumerWidget {
         : (authUser?.displayName ?? 'Student');
     final email = profile?.email.isNotEmpty == true
         ? profile!.email
-        : (authUser?.email ?? 'student@campus.edu');
+        : (authUser?.email ?? 'user@cashmate.com');
     final completedCount = profile?.completedExchanges ?? 0;
     final rating = profile?.rating ?? 5.0;
 
@@ -139,7 +139,7 @@ class ProfileScreen extends ConsumerWidget {
                     const Divider(height: 1),
                     _buildMenuItem(
                       icon: Icons.help_outline,
-                      title: 'CampusCash Safety Guidelines',
+                      title: 'CashMate Safety Guidelines',
                       onTap: () {},
                     ),
                   ],
@@ -159,7 +159,7 @@ class ProfileScreen extends ConsumerWidget {
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Sign Out'),
-                      content: const Text('Are you sure you want to log out of CampusCash?'),
+                      content: const Text('Are you sure you want to log out of CashMate?'),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, false),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/chat_message_model.dart';
+import '../../../models/connection_model.dart';
 import '../../../models/exchange_model.dart';
 import '../../../models/exchange_request_model.dart';
 
@@ -10,13 +11,36 @@ class ExchangeService {
   CollectionReference<Map<String, dynamic>> get _requestsCol =>
       _firestore.collection('exchangeRequests');
 
+  CollectionReference<Map<String, dynamic>> get _connectionsCol =>
+      _firestore.collection('connections');
+
   CollectionReference<Map<String, dynamic>> get _exchangesCol =>
       _firestore.collection('exchanges');
 
   CollectionReference<Map<String, dynamic>> get _notificationsCol =>
       _firestore.collection('notifications');
 
-  // Stream user's active request
+  // Helper to compute deterministic connection/chat ID between two requests
+  static String getConnectionId(String reqA, String reqB) {
+    return reqA.compareTo(reqB) < 0 ? '${reqA}_$reqB' : '${reqB}_$reqA';
+  }
+
+  // Alias for backwards compatibility
+  static String getChatId(String idA, String idB) => getConnectionId(idA, idB);
+
+  // 1. Stream all active public searching requests (for the Requests screen)
+  Stream<List<ExchangeRequestModel>> streamPublicRequests() {
+    return _requestsCol
+        .where('status', isEqualTo: ExchangeStatus.searching.value)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((doc) => ExchangeRequestModel.fromFirestore(doc))
+            .where((req) => !req.isExpired)
+            .toList());
+  }
+
+  // 2. Stream user's active request
   Stream<ExchangeRequestModel?> streamActiveRequest(String userId) {
     return _requestsCol
         .where('userId', isEqualTo: userId)
@@ -30,7 +54,7 @@ class ExchangeService {
     });
   }
 
-  // Stream a specific request by ID
+  // 3. Stream a specific request by ID
   Stream<ExchangeRequestModel?> streamRequest(String requestId) {
     return _requestsCol.doc(requestId).snapshots().map((doc) {
       if (!doc.exists) return null;
@@ -38,7 +62,75 @@ class ExchangeService {
     });
   }
 
-  // Create an exchange request and proactively look for a match
+  // 4. Stream user's connections (Active & Completed)
+  Stream<List<ConnectionModel>> streamUserConnections(String userId) {
+    late StreamController<List<ConnectionModel>> controller;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subA;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subB;
+
+    Map<String, ConnectionModel> userAConnections = {};
+    Map<String, ConnectionModel> userBConnections = {};
+
+    void emitMerged() {
+      final all = {...userAConnections, ...userBConnections}.values.toList();
+      all.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!controller.isClosed) {
+        controller.add(all);
+      }
+    }
+
+    controller = StreamController<List<ConnectionModel>>(
+      onListen: () {
+        subA = _connectionsCol
+            .where('userAId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            userAConnections = {
+              for (var doc in snap.docs)
+                doc.id: ConnectionModel.fromFirestore(doc)
+            };
+            emitMerged();
+          },
+          onError: (e) {
+            if (!controller.isClosed) controller.addError(e);
+          },
+        );
+
+        subB = _connectionsCol
+            .where('userBId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            userBConnections = {
+              for (var doc in snap.docs)
+                doc.id: ConnectionModel.fromFirestore(doc)
+            };
+            emitMerged();
+          },
+          onError: (e) {
+            if (!controller.isClosed) controller.addError(e);
+          },
+        );
+      },
+      onCancel: () {
+        subA?.cancel();
+        subB?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  // 5. Stream single connection by ID
+  Stream<ConnectionModel?> streamConnection(String connectionId) {
+    return _connectionsCol.doc(connectionId).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return ConnectionModel.fromFirestore(doc);
+    });
+  }
+
+  // 6. Create an exchange request and proactively look for an exact match
   Future<ExchangeRequestModel> createRequest({
     required String userId,
     required String userName,
@@ -47,14 +139,19 @@ class ExchangeService {
     required int amount,
     String location = 'Campus Cafeteria',
   }) async {
-    // 1. Verify no existing active request
+    if (has == wants) {
+      throw Exception('What you have and what you want cannot be identical.');
+    }
+
+    // Verify only one active searching/matched request per user
     final existing = await _requestsCol
         .where('userId', isEqualTo: userId)
         .where('status', whereIn: ['searching', 'matched', 'accepted'])
         .get();
 
     if (existing.docs.isNotEmpty) {
-      throw Exception('You already have an active request. Complete or cancel it first.');
+      throw Exception(
+          'You already have an active request. Please cancel your current request before creating another.');
     }
 
     final now = DateTime.now();
@@ -77,16 +174,17 @@ class ExchangeService {
 
     await docRef.set(request.toMap());
 
-    // 2. Search for matching counter-request
+    // Automatically check for exact compatible match
     await findAndBindMatch(request);
 
     return request;
   }
 
-  // Matching Engine with atomic Firestore transaction
+  // 7. Automatic Exact Matching Engine with atomic Firestore transaction
   Future<bool> findAndBindMatch(ExchangeRequestModel currentRequest) async {
     try {
-      // Query candidate counter-requests
+      // Query candidate counter-requests:
+      // Exact opposite has/wants, exact same amount, searching status
       final snapshot = await _requestsCol
           .where('has', isEqualTo: currentRequest.wants)
           .where('wants', isEqualTo: currentRequest.has)
@@ -120,8 +218,9 @@ class ExchangeService {
       final candidateData = validCandidate.data()!;
       final candidateUserId = candidateData['userId'] as String;
       final candidateUserName = candidateData['userName'] as String? ?? 'Student';
+      final connectionId = getConnectionId(currentRequest.id, candidateId);
 
-      // Atomic Transaction to lock both requests
+      // Atomic Transaction to match both requests and create Connection
       return await _firestore.runTransaction<bool>((transaction) async {
         final freshCurrent = await transaction.get(_requestsCol.doc(currentRequest.id));
         final freshCandidate = await transaction.get(_requestsCol.doc(candidateId));
@@ -146,6 +245,7 @@ class ExchangeService {
           'status': ExchangeStatus.matched.value,
           'matchedUserId': candidateUserId,
           'matchedRequestId': candidateId,
+          'connectionId': connectionId,
           'userAccepted': false,
           'matchedUserAccepted': false,
           'updatedAt': updateTime,
@@ -156,18 +256,45 @@ class ExchangeService {
           'status': ExchangeStatus.matched.value,
           'matchedUserId': currentRequest.userId,
           'matchedRequestId': currentRequest.id,
+          'connectionId': connectionId,
           'userAccepted': false,
           'matchedUserAccepted': false,
           'updatedAt': updateTime,
         });
+
+        // Create Connection Document
+        final connDoc = _connectionsCol.doc(connectionId);
+        final newConnection = ConnectionModel(
+          id: connectionId,
+          userAId: currentRequest.userId,
+          userBId: candidateUserId,
+          requestAId: currentRequest.id,
+          requestBId: candidateId,
+          userAName: currentRequest.userName,
+          userBName: candidateUserName,
+          userAHas: currentRequest.has,
+          userBHas: candidateData['has'] as String? ?? currentRequest.wants,
+          amount: currentRequest.amount,
+          location: currentRequest.location,
+          status: ConnectionStatus.pending,
+          userAAccepted: false,
+          userBAccepted: false,
+          userAConfirmed: false,
+          userBConfirmed: false,
+          createdAt: updateTime.toDate(),
+        );
+
+        transaction.set(connDoc, newConnection.toMap());
 
         // Add Notification for candidate user
         final notifB = _notificationsCol.doc();
         transaction.set(notifB, {
           'userId': candidateUserId,
           'title': 'Match Found! 🎉',
-          'message': 'You have been matched with ${currentRequest.userName} for ₹${currentRequest.amount}.',
+          'message':
+              'You have been matched with ${currentRequest.userName} for ₹${currentRequest.amount}.',
           'type': 'match_found',
+          'connectionId': connectionId,
           'isRead': false,
           'createdAt': updateTime,
         });
@@ -177,8 +304,10 @@ class ExchangeService {
         transaction.set(notifA, {
           'userId': currentRequest.userId,
           'title': 'Match Found! 🎉',
-          'message': 'You have been matched with $candidateUserName for ₹${currentRequest.amount}.',
+          'message':
+              'You have been matched with $candidateUserName for ₹${currentRequest.amount}.',
           'type': 'match_found',
+          'connectionId': connectionId,
           'isRead': false,
           'createdAt': updateTime,
         });
@@ -190,43 +319,228 @@ class ExchangeService {
     }
   }
 
-  // Accept Match Handshake
-  Future<void> acceptMatch({
-    required String requestId,
-    required String matchedRequestId,
+  // 8. Manual Connect Operation (from Public Requests screen)
+  Future<ConnectionModel> connectToRequest({
+    required String currentUserId,
+    required String currentUserName,
+    required String targetRequestId,
   }) async {
-    await _firestore.runTransaction((transaction) async {
-      final myDoc = await transaction.get(_requestsCol.doc(requestId));
-      final partnerDoc = await transaction.get(_requestsCol.doc(matchedRequestId));
-
-      if (!myDoc.exists || !partnerDoc.exists) {
-        throw Exception('Request no longer exists.');
+    return await _firestore.runTransaction<ConnectionModel>((transaction) async {
+      // 1. Re-read target request
+      final targetDoc = await transaction.get(_requestsCol.doc(targetRequestId));
+      if (!targetDoc.exists) {
+        throw Exception('Target request no longer exists.');
       }
 
-      final partnerAccepted = partnerDoc.data()?['userAccepted'] as bool? ?? false;
+      final targetData = targetDoc.data()!;
+      final targetStatus = targetData['status'] as String?;
+      final targetUserId = targetData['userId'] as String?;
+      final targetUserName = targetData['userName'] as String? ?? 'Student';
+      final targetHas = targetData['has'] as String;
+      final targetWants = targetData['wants'] as String;
+      final targetAmount = (targetData['amount'] as num).toInt();
+      final targetExpiresAt = (targetData['expiresAt'] as Timestamp?)?.toDate();
+
+      if (targetStatus != ExchangeStatus.searching.value) {
+        throw Exception('Request already matched.');
+      }
+
+      if (targetUserId == currentUserId) {
+        throw Exception('Cannot connect to your own request.');
+      }
+
+      if (targetExpiresAt != null && targetExpiresAt.isBefore(DateTime.now())) {
+        throw Exception('This exchange request has expired.');
+      }
+
+      // 2. Check current user's existing searching request
+      final userActiveSnap = await _requestsCol
+          .where('userId', isEqualTo: currentUserId)
+          .where('status', isEqualTo: ExchangeStatus.searching.value)
+          .get();
+
+      String myRequestId;
+      String myLocation = targetData['location'] as String? ?? 'Campus Cafeteria';
+
+      if (userActiveSnap.docs.isNotEmpty) {
+        final myDoc = userActiveSnap.docs.first;
+        final myData = myDoc.data();
+
+        // Validate compatibility
+        if (myData['has'] != targetWants ||
+            myData['wants'] != targetHas ||
+            (myData['amount'] as num).toInt() != targetAmount) {
+          throw Exception(
+              'Your active request does not match this request direction or amount.');
+        }
+
+        myRequestId = myDoc.id;
+        myLocation = myData['location'] as String? ?? myLocation;
+      } else {
+        // Create a matching request for current user
+        final newReqRef = _requestsCol.doc();
+        myRequestId = newReqRef.id;
+        final now = DateTime.now();
+
+        final newReq = ExchangeRequestModel(
+          id: myRequestId,
+          userId: currentUserId,
+          userName: currentUserName,
+          has: targetWants,
+          wants: targetHas,
+          amount: targetAmount,
+          location: myLocation,
+          status: ExchangeStatus.matched,
+          createdAt: now,
+          updatedAt: now,
+          expiresAt: now.add(const Duration(minutes: 30)),
+        );
+
+        transaction.set(newReqRef, newReq.toMap());
+      }
+
+      final updateTime = Timestamp.now();
+      final connectionId = getConnectionId(myRequestId, targetRequestId);
+
+      // Update both requests to matched
+      transaction.update(_requestsCol.doc(myRequestId), {
+        'status': ExchangeStatus.matched.value,
+        'matchedUserId': targetUserId,
+        'matchedRequestId': targetRequestId,
+        'connectionId': connectionId,
+        'userAccepted': false,
+        'matchedUserAccepted': false,
+        'updatedAt': updateTime,
+      });
+
+      transaction.update(_requestsCol.doc(targetRequestId), {
+        'status': ExchangeStatus.matched.value,
+        'matchedUserId': currentUserId,
+        'matchedRequestId': myRequestId,
+        'connectionId': connectionId,
+        'userAccepted': false,
+        'matchedUserAccepted': false,
+        'updatedAt': updateTime,
+      });
+
+      // Create Connection Document
+      final connection = ConnectionModel(
+        id: connectionId,
+        userAId: currentUserId,
+        userBId: targetUserId!,
+        requestAId: myRequestId,
+        requestBId: targetRequestId,
+        userAName: currentUserName,
+        userBName: targetUserName,
+        userAHas: targetWants,
+        userBHas: targetHas,
+        amount: targetAmount,
+        location: myLocation,
+        status: ConnectionStatus.pending,
+        userAAccepted: false,
+        userBAccepted: false,
+        userAConfirmed: false,
+        userBConfirmed: false,
+        createdAt: updateTime.toDate(),
+      );
+
+      transaction.set(_connectionsCol.doc(connectionId), connection.toMap());
+
+      // Notify target user
+      final notifTarget = _notificationsCol.doc();
+      transaction.set(notifTarget, {
+        'userId': targetUserId,
+        'title': 'Match Found! 🎉',
+        'message':
+            '$currentUserName connected with your ₹$targetAmount request.',
+        'type': 'match_found',
+        'connectionId': connectionId,
+        'isRead': false,
+        'createdAt': updateTime,
+      });
+
+      // Notify current user
+      final notifCurrent = _notificationsCol.doc();
+      transaction.set(notifCurrent, {
+        'userId': currentUserId,
+        'title': 'Connected! 🎉',
+        'message':
+            'You connected with $targetUserName for ₹$targetAmount.',
+        'type': 'match_found',
+        'connectionId': connectionId,
+        'isRead': false,
+        'createdAt': updateTime,
+      });
+
+      return connection;
+    });
+  }
+
+  // 9. Accept Connection Handshake (both users must accept)
+  Future<void> acceptConnection({
+    required String connectionId,
+    required String userId,
+  }) async {
+    await _firestore.runTransaction((transaction) async {
+      final connDoc = await transaction.get(_connectionsCol.doc(connectionId));
+      if (!connDoc.exists) {
+        throw Exception('Connection not found.');
+      }
+
+      final conn = ConnectionModel.fromFirestore(connDoc);
+      final isUserA = conn.userAId == userId;
+      final partnerId = isUserA ? conn.userBId : conn.userAId;
+      final partnerAccepted = isUserA ? conn.userBAccepted : conn.userAAccepted;
+
       final updateTime = Timestamp.now();
 
       if (partnerAccepted) {
-        // Both have accepted -> move to accepted
-        transaction.update(_requestsCol.doc(requestId), {
+        // Both accepted! Transition connection to connected
+        transaction.update(_connectionsCol.doc(connectionId), {
+          if (isUserA) 'userAAccepted': true else 'userBAccepted': true,
+          'status': ConnectionStatus.connected.value,
+        });
+
+        // Update requests to accepted
+        transaction.update(_requestsCol.doc(conn.requestAId), {
+          'status': ExchangeStatus.accepted.value,
           'userAccepted': true,
           'matchedUserAccepted': true,
-          'status': ExchangeStatus.accepted.value,
           'updatedAt': updateTime,
         });
-        transaction.update(_requestsCol.doc(matchedRequestId), {
+        transaction.update(_requestsCol.doc(conn.requestBId), {
+          'status': ExchangeStatus.accepted.value,
           'userAccepted': true,
           'matchedUserAccepted': true,
-          'status': ExchangeStatus.accepted.value,
           'updatedAt': updateTime,
+        });
+
+        // Send notification: Connection Accepted
+        final notif = _notificationsCol.doc();
+        transaction.set(notif, {
+          'userId': partnerId,
+          'title': 'Connection Accepted',
+          'message': 'You can now complete your exchange.',
+          'type': 'connection_accepted',
+          'connectionId': connectionId,
+          'isRead': false,
+          'createdAt': updateTime,
         });
       } else {
         // Only this user accepted so far
-        transaction.update(_requestsCol.doc(requestId), {
+        transaction.update(_connectionsCol.doc(connectionId), {
+          if (isUserA) 'userAAccepted': true else 'userBAccepted': true,
+        });
+
+        // Update request accepted flag
+        final myReqId = isUserA ? conn.requestAId : conn.requestBId;
+        final partnerReqId = isUserA ? conn.requestBId : conn.requestAId;
+
+        transaction.update(_requestsCol.doc(myReqId), {
           'userAccepted': true,
           'updatedAt': updateTime,
         });
-        transaction.update(_requestsCol.doc(matchedRequestId), {
+        transaction.update(_requestsCol.doc(partnerReqId), {
           'matchedUserAccepted': true,
           'updatedAt': updateTime,
         });
@@ -234,74 +548,77 @@ class ExchangeService {
     });
   }
 
-  // Dual Confirmation Handshake to complete exchange
-  Future<void> confirmExchange({
-    required String requestId,
-    required String matchedRequestId,
-    required String currentUserId,
+  // 10. Dual Confirmation Handshake to complete exchange
+  Future<void> confirmConnection({
+    required String connectionId,
+    required String userId,
   }) async {
     await _firestore.runTransaction((transaction) async {
-      // 1. All Reads First (Firestore requirement)
-      final myDoc = await transaction.get(_requestsCol.doc(requestId));
-      final partnerDoc = await transaction.get(_requestsCol.doc(matchedRequestId));
-
-      if (!myDoc.exists || !partnerDoc.exists) {
-        throw Exception('Exchange requests not found.');
+      // 1. All Reads First
+      final connDoc = await transaction.get(_connectionsCol.doc(connectionId));
+      if (!connDoc.exists) {
+        throw Exception('Connection not found.');
       }
 
-      final myData = myDoc.data()!;
-      final partnerData = partnerDoc.data()!;
-      final partnerUserId = partnerData['userId'] as String;
+      final conn = ConnectionModel.fromFirestore(connDoc);
+      final isUserA = conn.userAId == userId;
+      final partnerConfirmed = isUserA ? conn.userBConfirmed : conn.userAConfirmed;
 
-      final userARef = _firestore.collection('users').doc(currentUserId);
-      final userBRef = _firestore.collection('users').doc(partnerUserId);
+      final userARef = _firestore.collection('users').doc(conn.userAId);
+      final userBRef = _firestore.collection('users').doc(conn.userBId);
 
       final userASnap = await transaction.get(userARef);
       final userBSnap = await transaction.get(userBRef);
 
-      final partnerConfirmed = partnerData['userConfirmed'] as bool? ?? false;
       final updateTime = Timestamp.now();
 
       // 2. All Writes After
       if (partnerConfirmed) {
-        // Both confirmed! Mark completed and archive to exchanges collection
-        transaction.update(_requestsCol.doc(requestId), {
+        // Both confirmed! Mark completed
+        transaction.update(_connectionsCol.doc(connectionId), {
+          if (isUserA) 'userAConfirmed': true else 'userBConfirmed': true,
+          'status': ConnectionStatus.completed.value,
+          'completedAt': updateTime,
+        });
+
+        // Update both requests
+        transaction.update(_requestsCol.doc(conn.requestAId), {
+          'status': ExchangeStatus.completed.value,
           'userConfirmed': true,
           'matchedUserConfirmed': true,
+          'updatedAt': updateTime,
+        });
+        transaction.update(_requestsCol.doc(conn.requestBId), {
           'status': ExchangeStatus.completed.value,
+          'userConfirmed': true,
+          'matchedUserConfirmed': true,
           'updatedAt': updateTime,
         });
 
-        transaction.update(_requestsCol.doc(matchedRequestId), {
-          'userConfirmed': true,
-          'matchedUserConfirmed': true,
-          'status': ExchangeStatus.completed.value,
-          'updatedAt': updateTime,
-        });
-
-        final exchangeDoc = _exchangesCol.doc();
+        // Archive into exchanges collection for historical consistency
+        final exchangeDoc = _exchangesCol.doc(connectionId);
         final completedExchange = ExchangeModel(
-          id: exchangeDoc.id,
-          requestIdA: requestId,
-          requestIdB: matchedRequestId,
-          userAId: currentUserId,
-          userBId: partnerUserId,
-          userAName: myData['userName'] as String,
-          userBName: partnerData['userName'] as String,
-          amount: (myData['amount'] as num).toInt(),
-          userAHas: myData['has'] as String,
-          userBHas: partnerData['has'] as String,
-          location: myData['location'] as String? ?? 'Campus Cafeteria',
+          id: connectionId,
+          requestIdA: conn.requestAId,
+          requestIdB: conn.requestBId,
+          userAId: conn.userAId,
+          userBId: conn.userBId,
+          userAName: conn.userAName,
+          userBName: conn.userBName,
+          amount: conn.amount,
+          userAHas: conn.userAHas,
+          userBHas: conn.userBHas,
+          location: conn.location,
           status: 'completed',
           userAConfirmed: true,
           userBConfirmed: true,
-          createdAt: (myData['createdAt'] as Timestamp).toDate(),
+          createdAt: conn.createdAt,
           completedAt: updateTime.toDate(),
         );
 
         transaction.set(exchangeDoc, {
           ...completedExchange.toMap(),
-          'participantIds': [currentUserId, partnerUserId],
+          'participantIds': [conn.userAId, conn.userBId],
         });
 
         if (userASnap.exists) {
@@ -310,13 +627,43 @@ class ExchangeService {
         if (userBSnap.exists) {
           transaction.update(userBRef, {'completedExchanges': FieldValue.increment(1)});
         }
+
+        // Notify both users: Exchange Completed
+        final notifA = _notificationsCol.doc();
+        transaction.set(notifA, {
+          'userId': conn.userAId,
+          'title': 'Exchange Completed',
+          'message': 'Your ₹${conn.amount} exchange is complete.',
+          'type': 'exchange_completed',
+          'connectionId': connectionId,
+          'isRead': false,
+          'createdAt': updateTime,
+        });
+
+        final notifB = _notificationsCol.doc();
+        transaction.set(notifB, {
+          'userId': conn.userBId,
+          'title': 'Exchange Completed',
+          'message': 'Your ₹${conn.amount} exchange is complete.',
+          'type': 'exchange_completed',
+          'connectionId': connectionId,
+          'isRead': false,
+          'createdAt': updateTime,
+        });
       } else {
-        // Mark current user confirmed and notify partner via matchedUserConfirmed
-        transaction.update(_requestsCol.doc(requestId), {
+        // Mark current user confirmed
+        transaction.update(_connectionsCol.doc(connectionId), {
+          if (isUserA) 'userAConfirmed': true else 'userBConfirmed': true,
+        });
+
+        final myReqId = isUserA ? conn.requestAId : conn.requestBId;
+        final partnerReqId = isUserA ? conn.requestBId : conn.requestAId;
+
+        transaction.update(_requestsCol.doc(myReqId), {
           'userConfirmed': true,
           'updatedAt': updateTime,
         });
-        transaction.update(_requestsCol.doc(matchedRequestId), {
+        transaction.update(_requestsCol.doc(partnerReqId), {
           'matchedUserConfirmed': true,
           'updatedAt': updateTime,
         });
@@ -324,11 +671,82 @@ class ExchangeService {
     });
   }
 
-  // Update agreed meetup location
+  // 11. Cancel Connection
+  Future<void> cancelConnection({
+    required String connectionId,
+    required String userId,
+  }) async {
+    final connDoc = await _connectionsCol.doc(connectionId).get();
+    if (!connDoc.exists) return;
+
+    final conn = ConnectionModel.fromFirestore(connDoc);
+    final batch = _firestore.batch();
+    final updateTime = Timestamp.now();
+
+    batch.update(_connectionsCol.doc(connectionId), {
+      'status': ConnectionStatus.cancelled.value,
+    });
+
+    batch.update(_requestsCol.doc(conn.requestAId), {
+      'status': ExchangeStatus.cancelled.value,
+      'updatedAt': updateTime,
+    });
+
+    batch.update(_requestsCol.doc(conn.requestBId), {
+      'status': ExchangeStatus.cancelled.value,
+      'updatedAt': updateTime,
+    });
+
+    await batch.commit();
+  }
+
+  // 12. Cancel Request
+  Future<void> cancelRequest(String requestId) async {
+    final doc = await _requestsCol.doc(requestId).get();
+    if (!doc.exists) return;
+
+    final data = doc.data()!;
+    final matchedRequestId = data['matchedRequestId'] as String?;
+    final connectionId = data['connectionId'] as String?;
+
+    final batch = _firestore.batch();
+    final now = Timestamp.now();
+
+    batch.update(_requestsCol.doc(requestId), {
+      'status': ExchangeStatus.cancelled.value,
+      'updatedAt': now,
+    });
+
+    if (connectionId != null) {
+      batch.update(_connectionsCol.doc(connectionId), {
+        'status': ConnectionStatus.cancelled.value,
+      });
+    }
+
+    if (matchedRequestId != null) {
+      // Revert partner request back to searching so they can find another match
+      batch.update(_requestsCol.doc(matchedRequestId), {
+        'status': ExchangeStatus.searching.value,
+        'matchedUserId': null,
+        'matchedRequestId': null,
+        'connectionId': null,
+        'userAccepted': false,
+        'matchedUserAccepted': false,
+        'userConfirmed': false,
+        'matchedUserConfirmed': false,
+        'updatedAt': now,
+      });
+    }
+
+    await batch.commit();
+  }
+
+  // 13. Update agreed meetup location
   Future<void> updateMeetupLocation({
     required String requestId,
     String? matchedRequestId,
     required String newLocation,
+    String? connectionId,
   }) async {
     final batch = _firestore.batch();
     batch.update(_requestsCol.doc(requestId), {
@@ -341,41 +759,15 @@ class ExchangeService {
         'updatedAt': Timestamp.now(),
       });
     }
-    await batch.commit();
-  }
-
-  // Cancel Request
-  Future<void> cancelRequest(String requestId) async {
-    final doc = await _requestsCol.doc(requestId).get();
-    if (!doc.exists) return;
-
-    final data = doc.data()!;
-    final matchedRequestId = data['matchedRequestId'] as String?;
-
-    final batch = _firestore.batch();
-    batch.update(_requestsCol.doc(requestId), {
-      'status': ExchangeStatus.cancelled.value,
-      'updatedAt': Timestamp.now(),
-    });
-
-    if (matchedRequestId != null) {
-      // Revert partner request back to searching so they can find another peer
-      batch.update(_requestsCol.doc(matchedRequestId), {
-        'status': ExchangeStatus.searching.value,
-        'matchedUserId': null,
-        'matchedRequestId': null,
-        'userAccepted': false,
-        'matchedUserAccepted': false,
-        'userConfirmed': false,
-        'matchedUserConfirmed': false,
-        'updatedAt': Timestamp.now(),
+    if (connectionId != null) {
+      batch.update(_connectionsCol.doc(connectionId), {
+        'location': newLocation,
       });
     }
-
     await batch.commit();
   }
 
-  // Stream completed/cancelled exchanges for History
+  // 14. Stream completed/cancelled exchanges for History
   Stream<List<ExchangeModel>> streamUserHistory(String userId) {
     late StreamController<List<ExchangeModel>> controller;
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subA;
@@ -433,20 +825,17 @@ class ExchangeService {
     return controller.stream;
   }
 
-  // Stream notifications
+  // 15. Stream notifications
   Stream<List<Map<String, dynamic>>> streamNotifications(String userId) {
     return _notificationsCol
         .where('userId', isEqualTo: userId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
+        .map((snap) =>
+            snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
   }
 
-  // Helper to compute deterministic chat ID between two requests
-  static String getChatId(String idA, String idB) {
-    return idA.compareTo(idB) < 0 ? '${idA}_$idB' : '${idB}_$idA';
-  }
-
+  // 16. Chat Subcollection
   CollectionReference<Map<String, dynamic>> _chatMessagesCol(String chatId) =>
       _firestore.collection('exchangeChats').doc(chatId).collection('messages');
 
@@ -484,5 +873,26 @@ class ExchangeService {
 
     await docRef.set(msg.toMap());
   }
-}
 
+  // Backwards compatibility for match acceptance
+  Future<void> acceptMatch({
+    required String requestId,
+    required String matchedRequestId,
+  }) async {
+    final connectionId = getConnectionId(requestId, matchedRequestId);
+    final reqDoc = await _requestsCol.doc(requestId).get();
+    if (!reqDoc.exists) return;
+    final userId = reqDoc.data()!['userId'] as String;
+    await acceptConnection(connectionId: connectionId, userId: userId);
+  }
+
+  // Backwards compatibility for match confirmation
+  Future<void> confirmExchange({
+    required String requestId,
+    required String matchedRequestId,
+    required String currentUserId,
+  }) async {
+    final connectionId = getConnectionId(requestId, matchedRequestId);
+    await confirmConnection(connectionId: connectionId, userId: currentUserId);
+  }
+}

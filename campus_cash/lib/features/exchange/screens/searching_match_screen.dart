@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../models/exchange_request_model.dart';
 import '../providers/exchange_provider.dart';
+import 'connection_details_screen.dart';
 import 'match_details_screen.dart';
 
 class SearchingMatchScreen extends ConsumerStatefulWidget {
@@ -80,12 +81,24 @@ class _SearchingMatchScreenState extends ConsumerState<SearchingMatchScreen>
     activeRequestAsync.whenData((req) {
       if (req != null && req.status == ExchangeStatus.matched) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => MatchDetailsScreen(request: req),
-            ),
-          );
+          if (mounted) {
+            if (req.connectionId != null) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ConnectionDetailsScreen(connectionId: req.connectionId!),
+                ),
+              );
+            } else {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MatchDetailsScreen(request: req),
+                ),
+              );
+            }
+          }
         });
       }
     });

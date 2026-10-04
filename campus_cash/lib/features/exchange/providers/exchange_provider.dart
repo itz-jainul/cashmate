@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/chat_message_model.dart';
+import '../../../models/connection_model.dart';
 import '../../../models/exchange_model.dart';
 import '../../../models/exchange_request_model.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -9,6 +10,14 @@ final exchangeServiceProvider = Provider<ExchangeService>((ref) {
   return ExchangeService();
 });
 
+// Stream all public searching requests
+final publicRequestsProvider =
+    StreamProvider<List<ExchangeRequestModel>>((ref) {
+  final service = ref.watch(exchangeServiceProvider);
+  return service.streamPublicRequests();
+});
+
+// Stream current user's active request
 final activeRequestProvider = StreamProvider<ExchangeRequestModel?>((ref) {
   final authState = ref.watch(authStateProvider);
   final user = authState.value;
@@ -21,11 +30,34 @@ final activeRequestProvider = StreamProvider<ExchangeRequestModel?>((ref) {
   return service.streamActiveRequest(user.uid);
 });
 
-final requestByIdProvider = StreamProvider.family<ExchangeRequestModel?, String>((ref, requestId) {
+// Stream specific request by ID
+final requestByIdProvider =
+    StreamProvider.family<ExchangeRequestModel?, String>((ref, requestId) {
   final service = ref.watch(exchangeServiceProvider);
   return service.streamRequest(requestId);
 });
 
+// Stream user's connections (Active & Completed)
+final userConnectionsProvider = StreamProvider<List<ConnectionModel>>((ref) {
+  final authState = ref.watch(authStateProvider);
+  final user = authState.value;
+
+  if (user == null) {
+    return Stream.value([]);
+  }
+
+  final service = ref.watch(exchangeServiceProvider);
+  return service.streamUserConnections(user.uid);
+});
+
+// Stream specific connection by ID
+final connectionByIdProvider =
+    StreamProvider.family<ConnectionModel?, String>((ref, connectionId) {
+  final service = ref.watch(exchangeServiceProvider);
+  return service.streamConnection(connectionId);
+});
+
+// Stream user history
 final userHistoryProvider = StreamProvider<List<ExchangeModel>>((ref) {
   final authState = ref.watch(authStateProvider);
   final user = authState.value;
@@ -38,7 +70,9 @@ final userHistoryProvider = StreamProvider<List<ExchangeModel>>((ref) {
   return service.streamUserHistory(user.uid);
 });
 
-final notificationsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
+// Stream notifications
+final notificationsProvider =
+    StreamProvider<List<Map<String, dynamic>>>((ref) {
   final authState = ref.watch(authStateProvider);
   final user = authState.value;
 
@@ -50,8 +84,9 @@ final notificationsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   return service.streamNotifications(user.uid);
 });
 
-final chatMessagesProvider = StreamProvider.family<List<ChatMessageModel>, String>((ref, chatId) {
+// Stream chat messages
+final chatMessagesProvider =
+    StreamProvider.family<List<ChatMessageModel>, String>((ref, chatId) {
   final service = ref.watch(exchangeServiceProvider);
   return service.streamChatMessages(chatId);
 });
-

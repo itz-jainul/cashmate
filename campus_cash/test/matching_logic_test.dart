@@ -10,22 +10,25 @@ bool isCompatibleMatch({
       reqA.amount == reqB.amount &&
       reqA.userId != reqB.userId &&
       reqA.status == ExchangeStatus.searching &&
-      reqB.status == ExchangeStatus.searching;
+      reqB.status == ExchangeStatus.searching &&
+      !reqA.isExpired &&
+      !reqB.isExpired;
 }
 
 void main() {
-  group('CampusCash Matching Logic Tests (Phase 10 & 24)', () {
+  group('CashMate Exact Matching Logic Tests (Section 5 & 33)', () {
     final now = DateTime.now();
     final expires = now.add(const Duration(minutes: 30));
+    final expired = now.subtract(const Duration(minutes: 5));
 
-    test('Compatible requests match (Cash -> Digital vs Digital -> Cash for ₹500)', () {
+    test('Exact match: A Cash->Digital ₹100 and B Digital->Cash ₹100 => MATCH', () {
       final userAReq = ExchangeRequestModel(
         id: 'req_1',
         userId: 'user_a',
         userName: 'Arun',
         has: 'cash',
         wants: 'digital',
-        amount: 500,
+        amount: 100,
         status: ExchangeStatus.searching,
         createdAt: now,
         updatedAt: now,
@@ -38,7 +41,7 @@ void main() {
         userName: 'Rahul',
         has: 'digital',
         wants: 'cash',
-        amount: 500,
+        amount: 100,
         status: ExchangeStatus.searching,
         createdAt: now,
         updatedAt: now,
@@ -48,14 +51,14 @@ void main() {
       expect(isCompatibleMatch(reqA: userAReq, reqB: userBReq), isTrue);
     });
 
-    test('Mismatched amounts do not match (₹500 vs ₹300)', () {
+    test('Different amount: A ₹100 and B ₹80 => NO MATCH', () {
       final userAReq = ExchangeRequestModel(
         id: 'req_1',
         userId: 'user_a',
         userName: 'Arun',
         has: 'cash',
         wants: 'digital',
-        amount: 500,
+        amount: 100,
         status: ExchangeStatus.searching,
         createdAt: now,
         updatedAt: now,
@@ -68,7 +71,7 @@ void main() {
         userName: 'Rahul',
         has: 'digital',
         wants: 'cash',
-        amount: 300,
+        amount: 80,
         status: ExchangeStatus.searching,
         createdAt: now,
         updatedAt: now,
@@ -78,14 +81,14 @@ void main() {
       expect(isCompatibleMatch(reqA: userAReq, reqB: userBReq), isFalse);
     });
 
-    test('Same requirements do not match (Cash -> Digital vs Cash -> Digital)', () {
+    test('Same direction: A Cash->Digital and B Cash->Digital => NO MATCH', () {
       final userAReq = ExchangeRequestModel(
         id: 'req_1',
         userId: 'user_a',
         userName: 'Arun',
         has: 'cash',
         wants: 'digital',
-        amount: 500,
+        amount: 100,
         status: ExchangeStatus.searching,
         createdAt: now,
         updatedAt: now,
@@ -98,7 +101,7 @@ void main() {
         userName: 'Rahul',
         has: 'cash',
         wants: 'digital',
-        amount: 500,
+        amount: 100,
         status: ExchangeStatus.searching,
         createdAt: now,
         updatedAt: now,
@@ -108,14 +111,14 @@ void main() {
       expect(isCompatibleMatch(reqA: userAReq, reqB: userBReq), isFalse);
     });
 
-    test('Self request cannot match own request', () {
+    test('Same user: User matching own request => NO MATCH', () {
       final userAReq1 = ExchangeRequestModel(
         id: 'req_1',
         userId: 'user_a',
         userName: 'Arun',
         has: 'cash',
         wants: 'digital',
-        amount: 500,
+        amount: 100,
         status: ExchangeStatus.searching,
         createdAt: now,
         updatedAt: now,
@@ -128,7 +131,7 @@ void main() {
         userName: 'Arun',
         has: 'digital',
         wants: 'cash',
-        amount: 500,
+        amount: 100,
         status: ExchangeStatus.searching,
         createdAt: now,
         updatedAt: now,
@@ -136,6 +139,96 @@ void main() {
       );
 
       expect(isCompatibleMatch(reqA: userAReq1, reqB: userAReq2), isFalse);
+    });
+
+    test('Already matched request cannot match => NO MATCH', () {
+      final userAReq = ExchangeRequestModel(
+        id: 'req_1',
+        userId: 'user_a',
+        userName: 'Arun',
+        has: 'cash',
+        wants: 'digital',
+        amount: 100,
+        status: ExchangeStatus.matched,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: expires,
+      );
+
+      final userBReq = ExchangeRequestModel(
+        id: 'req_2',
+        userId: 'user_b',
+        userName: 'Rahul',
+        has: 'digital',
+        wants: 'cash',
+        amount: 100,
+        status: ExchangeStatus.searching,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: expires,
+      );
+
+      expect(isCompatibleMatch(reqA: userAReq, reqB: userBReq), isFalse);
+    });
+
+    test('Cancelled request cannot match => NO MATCH', () {
+      final userAReq = ExchangeRequestModel(
+        id: 'req_1',
+        userId: 'user_a',
+        userName: 'Arun',
+        has: 'cash',
+        wants: 'digital',
+        amount: 100,
+        status: ExchangeStatus.cancelled,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: expires,
+      );
+
+      final userBReq = ExchangeRequestModel(
+        id: 'req_2',
+        userId: 'user_b',
+        userName: 'Rahul',
+        has: 'digital',
+        wants: 'cash',
+        amount: 100,
+        status: ExchangeStatus.searching,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: expires,
+      );
+
+      expect(isCompatibleMatch(reqA: userAReq, reqB: userBReq), isFalse);
+    });
+
+    test('Expired request cannot match => NO MATCH', () {
+      final userAReq = ExchangeRequestModel(
+        id: 'req_1',
+        userId: 'user_a',
+        userName: 'Arun',
+        has: 'cash',
+        wants: 'digital',
+        amount: 100,
+        status: ExchangeStatus.searching,
+        createdAt: now.subtract(const Duration(minutes: 40)),
+        updatedAt: now.subtract(const Duration(minutes: 40)),
+        expiresAt: expired,
+      );
+
+      final userBReq = ExchangeRequestModel(
+        id: 'req_2',
+        userId: 'user_b',
+        userName: 'Rahul',
+        has: 'digital',
+        wants: 'cash',
+        amount: 100,
+        status: ExchangeStatus.searching,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: expires,
+      );
+
+      expect(isCompatibleMatch(reqA: userAReq, reqB: userBReq), isFalse);
     });
   });
 }

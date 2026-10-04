@@ -406,7 +406,7 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
                 ),
                 _buildInstructionItem(
                   step: '3',
-                  title: 'Confirm in CampusCash',
+                  title: 'Confirm in CashMate',
                   subtitle: 'Tap the confirmation button below ONLY after you have verified the money.',
                 ),
                 const SizedBox(height: 16),
@@ -426,7 +426,7 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'CampusCash never requests UPI PINs, passwords, or OTPs. Exchange is done directly between students outside the app.',
+                        'CashMate never requests UPI PINs, passwords, or OTPs. Exchange is done directly between users outside the app.',
                         style: TextStyle(fontSize: 12, color: AppColors.textPrimary, height: 1.4),
                       ),
                     ),

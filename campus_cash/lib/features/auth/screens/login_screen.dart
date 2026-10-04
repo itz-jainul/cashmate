@@ -79,7 +79,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Welcome to CampusCash',
+                  'Welcome to CashMate',
                   style: TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w800,
@@ -89,7 +89,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Log in to exchange cash with campus peers safely.',
+                  'Log in to find your cash exchange match safely.',
                   style: TextStyle(
                     fontSize: 15,
                     color: AppColors.textSecondary,

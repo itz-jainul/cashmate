@@ -64,7 +64,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Enter the email address registered with CampusCash and we will send you a reset link.',
+                  'Enter the email address registered with CashMate and we will send you a reset link.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
                 ),
                 const SizedBox(height: 28),
