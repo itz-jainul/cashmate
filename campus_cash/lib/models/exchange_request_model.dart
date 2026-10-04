@@ -41,6 +41,8 @@ class ExchangeRequestModel {
   final String? matchedRequestId;
   final bool userAccepted;
   final bool matchedUserAccepted;
+  final bool userConfirmed;
+  final bool matchedUserConfirmed;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime expiresAt;
@@ -57,6 +59,8 @@ class ExchangeRequestModel {
     this.matchedRequestId,
     this.userAccepted = false,
     this.matchedUserAccepted = false,
+    this.userConfirmed = false,
+    this.matchedUserConfirmed = false,
     required this.createdAt,
     required this.updatedAt,
     required this.expiresAt,
@@ -88,6 +92,8 @@ class ExchangeRequestModel {
       matchedRequestId: data['matchedRequestId'],
       userAccepted: data['userAccepted'] ?? false,
       matchedUserAccepted: data['matchedUserAccepted'] ?? false,
+      userConfirmed: data['userConfirmed'] ?? false,
+      matchedUserConfirmed: data['matchedUserConfirmed'] ?? false,
       createdAt: parseDate(data['createdAt']),
       updatedAt: parseDate(data['updatedAt']),
       expiresAt: parseDate(data['expiresAt']),
@@ -106,6 +112,8 @@ class ExchangeRequestModel {
       'matchedRequestId': matchedRequestId,
       'userAccepted': userAccepted,
       'matchedUserAccepted': matchedUserAccepted,
+      'userConfirmed': userConfirmed,
+      'matchedUserConfirmed': matchedUserConfirmed,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
@@ -124,6 +132,8 @@ class ExchangeRequestModel {
     String? matchedRequestId,
     bool? userAccepted,
     bool? matchedUserAccepted,
+    bool? userConfirmed,
+    bool? matchedUserConfirmed,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? expiresAt,
@@ -140,6 +150,8 @@ class ExchangeRequestModel {
       matchedRequestId: matchedRequestId ?? this.matchedRequestId,
       userAccepted: userAccepted ?? this.userAccepted,
       matchedUserAccepted: matchedUserAccepted ?? this.matchedUserAccepted,
+      userConfirmed: userConfirmed ?? this.userConfirmed,
+      matchedUserConfirmed: matchedUserConfirmed ?? this.matchedUserConfirmed,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       expiresAt: expiresAt ?? this.expiresAt,

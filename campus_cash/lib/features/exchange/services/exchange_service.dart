@@ -254,12 +254,14 @@ class ExchangeService {
         // Both confirmed! Mark completed and archive to exchanges collection
         transaction.update(_requestsCol.doc(requestId), {
           'userConfirmed': true,
+          'matchedUserConfirmed': true,
           'status': ExchangeStatus.completed.value,
           'updatedAt': updateTime,
         });
 
         transaction.update(_requestsCol.doc(matchedRequestId), {
           'userConfirmed': true,
+          'matchedUserConfirmed': true,
           'status': ExchangeStatus.completed.value,
           'updatedAt': updateTime,
         });
@@ -283,18 +285,31 @@ class ExchangeService {
           completedAt: updateTime.toDate(),
         );
 
-        transaction.set(exchangeDoc, completedExchange.toMap());
+        transaction.set(exchangeDoc, {
+          ...completedExchange.toMap(),
+          'participantIds': [currentUserId, partnerData['userId'] as String],
+        });
 
-        // Increment completed count on both user documents
+        // Safely increment completed count on both user documents if they exist
         final userARef = _firestore.collection('users').doc(currentUserId);
         final userBRef = _firestore.collection('users').doc(partnerData['userId'] as String);
 
-        transaction.update(userARef, {'completedExchanges': FieldValue.increment(1)});
-        transaction.update(userBRef, {'completedExchanges': FieldValue.increment(1)});
+        final userASnap = await transaction.get(userARef);
+        if (userASnap.exists) {
+          transaction.update(userARef, {'completedExchanges': FieldValue.increment(1)});
+        }
+        final userBSnap = await transaction.get(userBRef);
+        if (userBSnap.exists) {
+          transaction.update(userBRef, {'completedExchanges': FieldValue.increment(1)});
+        }
       } else {
-        // Mark current user confirmed
+        // Mark current user confirmed and notify partner via matchedUserConfirmed
         transaction.update(_requestsCol.doc(requestId), {
           'userConfirmed': true,
+          'updatedAt': updateTime,
+        });
+        transaction.update(_requestsCol.doc(matchedRequestId), {
+          'matchedUserConfirmed': true,
           'updatedAt': updateTime,
         });
       }
@@ -323,6 +338,8 @@ class ExchangeService {
         'matchedRequestId': null,
         'userAccepted': false,
         'matchedUserAccepted': false,
+        'userConfirmed': false,
+        'matchedUserConfirmed': false,
         'updatedAt': Timestamp.now(),
       });
     }
@@ -333,10 +350,10 @@ class ExchangeService {
   // Stream completed/cancelled exchanges for History
   Stream<List<ExchangeModel>> streamUserHistory(String userId) {
     return _exchangesCol
-        .where('userAId', isEqualTo: userId)
+        .where('participantIds', arrayContains: userId)
         .snapshots()
-        .map((snapA) {
-      final list = snapA.docs.map((doc) => ExchangeModel.fromFirestore(doc)).toList();
+        .map((snap) {
+      final list = snap.docs.map((doc) => ExchangeModel.fromFirestore(doc)).toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return list;
     });

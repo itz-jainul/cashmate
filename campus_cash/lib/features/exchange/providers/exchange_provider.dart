@@ -20,6 +20,11 @@ final activeRequestProvider = StreamProvider<ExchangeRequestModel?>((ref) {
   return service.streamActiveRequest(user.uid);
 });
 
+final requestByIdProvider = StreamProvider.family<ExchangeRequestModel?, String>((ref, requestId) {
+  final service = ref.watch(exchangeServiceProvider);
+  return service.streamRequest(requestId);
+});
+
 final userHistoryProvider = StreamProvider<List<ExchangeModel>>((ref) {
   final authState = ref.watch(authStateProvider);
   final user = authState.value;

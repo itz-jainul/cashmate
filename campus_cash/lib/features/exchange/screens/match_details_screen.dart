@@ -123,8 +123,8 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activeRequestAsync = ref.watch(activeRequestProvider);
-    final req = activeRequestAsync.value ?? widget.request;
+    final requestAsync = ref.watch(requestByIdProvider(widget.request.id));
+    final req = requestAsync.value ?? widget.request;
 
     final isAccepted = req.status == ExchangeStatus.accepted;
     final isCompleted = req.status == ExchangeStatus.completed;
@@ -331,11 +331,14 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
                       children: [
                         Icon(Icons.hourglass_top_rounded, color: AppColors.secondary, size: 20),
                         SizedBox(width: 8),
-                        Text(
-                          'Accepted! Waiting for partner to accept...',
-                          style: TextStyle(
-                            color: AppColors.secondary,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            'Accepted! Waiting for partner to accept...',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.secondary,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -351,12 +354,41 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
                   onPressed: () => _handleCancel(req),
                 ),
               ] else if (isAccepted) ...[
-                CustomButton(
-                  text: 'Confirm I Received ₹${req.amount}',
-                  isLoading: _isLoading,
-                  backgroundColor: AppColors.statusCompleted,
-                  onPressed: () => _handleConfirm(req),
-                ),
+                if (!req.userConfirmed) ...[
+                  CustomButton(
+                    text: 'Confirm I Received ₹${req.amount}',
+                    isLoading: _isLoading,
+                    backgroundColor: AppColors.statusCompleted,
+                    onPressed: () => _handleConfirm(req),
+                  ),
+                ] else ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusCompletedBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.statusCompleted.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle_outline, color: AppColors.statusCompleted, size: 20),
+                        SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'You confirmed receipt! Waiting for partner...',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.statusCompleted,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 CustomButton(
                   text: 'Cancel Exchange',
