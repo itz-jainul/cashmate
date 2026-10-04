@@ -237,6 +237,7 @@ class ExchangeService {
     required String currentUserId,
   }) async {
     await _firestore.runTransaction((transaction) async {
+      // 1. All Reads First (Firestore requirement)
       final myDoc = await transaction.get(_requestsCol.doc(requestId));
       final partnerDoc = await transaction.get(_requestsCol.doc(matchedRequestId));
 
@@ -246,10 +247,18 @@ class ExchangeService {
 
       final myData = myDoc.data()!;
       final partnerData = partnerDoc.data()!;
+      final partnerUserId = partnerData['userId'] as String;
+
+      final userARef = _firestore.collection('users').doc(currentUserId);
+      final userBRef = _firestore.collection('users').doc(partnerUserId);
+
+      final userASnap = await transaction.get(userARef);
+      final userBSnap = await transaction.get(userBRef);
 
       final partnerConfirmed = partnerData['userConfirmed'] as bool? ?? false;
       final updateTime = Timestamp.now();
 
+      // 2. All Writes After
       if (partnerConfirmed) {
         // Both confirmed! Mark completed and archive to exchanges collection
         transaction.update(_requestsCol.doc(requestId), {
@@ -272,7 +281,7 @@ class ExchangeService {
           requestIdA: requestId,
           requestIdB: matchedRequestId,
           userAId: currentUserId,
-          userBId: partnerData['userId'] as String,
+          userBId: partnerUserId,
           userAName: myData['userName'] as String,
           userBName: partnerData['userName'] as String,
           amount: (myData['amount'] as num).toInt(),
@@ -287,18 +296,12 @@ class ExchangeService {
 
         transaction.set(exchangeDoc, {
           ...completedExchange.toMap(),
-          'participantIds': [currentUserId, partnerData['userId'] as String],
+          'participantIds': [currentUserId, partnerUserId],
         });
 
-        // Safely increment completed count on both user documents if they exist
-        final userARef = _firestore.collection('users').doc(currentUserId);
-        final userBRef = _firestore.collection('users').doc(partnerData['userId'] as String);
-
-        final userASnap = await transaction.get(userARef);
         if (userASnap.exists) {
           transaction.update(userARef, {'completedExchanges': FieldValue.increment(1)});
         }
-        final userBSnap = await transaction.get(userBRef);
         if (userBSnap.exists) {
           transaction.update(userBRef, {'completedExchanges': FieldValue.increment(1)});
         }
