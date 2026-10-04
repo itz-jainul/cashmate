@@ -297,11 +297,54 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen> {
             // Requests List
             Expanded(
               child: publicRequestsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        ),
+                        SizedBox(height: 14),
+                        Text(
+                          'Loading public requests...',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 error: (e, _) => Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text('Error loading requests: $e', textAlign: TextAlign.center),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          size: 32,
+                          color: AppColors.statusCancelled,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Error loading requests: $e',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 14),
+                        OutlinedButton.icon(
+                          onPressed: () => ref.invalidate(publicRequestsProvider),
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 data: (allRequests) {

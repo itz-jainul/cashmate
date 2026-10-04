@@ -29,28 +29,38 @@ class ExchangeService {
   static String getChatId(String idA, String idB) => getConnectionId(idA, idB);
 
   // 1. Stream all active public searching requests (for the Requests screen)
+  // Queries by status without requiring composite indexes, sorted in memory
   Stream<List<ExchangeRequestModel>> streamPublicRequests() {
     return _requestsCol
         .where('status', isEqualTo: ExchangeStatus.searching.value)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => ExchangeRequestModel.fromFirestore(doc))
-            .where((req) => !req.isExpired)
-            .toList());
+        .map((snap) {
+      final list = snap.docs
+          .map((doc) => ExchangeRequestModel.fromFirestore(doc))
+          .where((req) => !req.isExpired)
+          .toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
+    });
   }
 
   // 2. Stream user's active request
   Stream<ExchangeRequestModel?> streamActiveRequest(String userId) {
     return _requestsCol
         .where('userId', isEqualTo: userId)
-        .where('status', whereIn: ['searching', 'matched', 'accepted'])
         .snapshots()
         .map((snapshot) {
       if (snapshot.docs.isEmpty) return null;
-      // Return the most recently updated active request
-      final doc = snapshot.docs.first;
-      return ExchangeRequestModel.fromFirestore(doc);
+      final activeList = snapshot.docs
+          .map((doc) => ExchangeRequestModel.fromFirestore(doc))
+          .where((req) =>
+              req.status == ExchangeStatus.searching ||
+              req.status == ExchangeStatus.matched ||
+              req.status == ExchangeStatus.accepted)
+          .toList();
+      if (activeList.isEmpty) return null;
+      activeList.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return activeList.first;
     });
   }
 
@@ -62,17 +72,32 @@ class ExchangeService {
     });
   }
 
-  // 4. Stream user's connections (Active & Completed)
+  // 4. Stream user's connections (Active & Completed, with backward-compatibility)
   Stream<List<ConnectionModel>> streamUserConnections(String userId) {
     late StreamController<List<ConnectionModel>> controller;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subA;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subB;
+    StreamSubscription? subA;
+    StreamSubscription? subB;
+    StreamSubscription? subReq;
+    StreamSubscription? subReqB;
+    StreamSubscription? subExA;
+    StreamSubscription? subExB;
 
     Map<String, ConnectionModel> userAConnections = {};
     Map<String, ConnectionModel> userBConnections = {};
+    Map<String, ConnectionModel> requestConnections = {};
+    Map<String, ConnectionModel> requestBConnections = {};
+    Map<String, ConnectionModel> historyConnections = {};
 
     void emitMerged() {
-      final all = {...userAConnections, ...userBConnections}.values.toList();
+      // Direct connections have highest priority, then requests, then history
+      final allMap = <String, ConnectionModel>{
+        ...historyConnections,
+        ...requestConnections,
+        ...requestBConnections,
+        ...userAConnections,
+        ...userBConnections,
+      };
+      final all = allMap.values.toList();
       all.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (!controller.isClosed) {
         controller.add(all);
@@ -81,6 +106,7 @@ class ExchangeService {
 
     controller = StreamController<List<ConnectionModel>>(
       onListen: () {
+        // Direct connections where user is User A
         subA = _connectionsCol
             .where('userAId', isEqualTo: userId)
             .snapshots()
@@ -92,11 +118,10 @@ class ExchangeService {
             };
             emitMerged();
           },
-          onError: (e) {
-            if (!controller.isClosed) controller.addError(e);
-          },
+          onError: (_) => emitMerged(),
         );
 
+        // Direct connections where user is User B
         subB = _connectionsCol
             .where('userBId', isEqualTo: userId)
             .snapshots()
@@ -108,26 +133,254 @@ class ExchangeService {
             };
             emitMerged();
           },
-          onError: (e) {
-            if (!controller.isClosed) controller.addError(e);
+          onError: (_) => emitMerged(),
+        );
+
+        // Backward compatibility: user's own matched/accepted requests
+        subReq = _requestsCol
+            .where('userId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            final Map<String, ConnectionModel> map = {};
+            for (final doc in snap.docs) {
+              final req = ExchangeRequestModel.fromFirestore(doc);
+              if (req.status == ExchangeStatus.matched ||
+                  req.status == ExchangeStatus.accepted ||
+                  req.status == ExchangeStatus.completed) {
+                if (req.matchedUserId != null && req.matchedRequestId != null) {
+                  final connId = req.connectionId ??
+                      getConnectionId(req.id, req.matchedRequestId!);
+                  final status = req.status == ExchangeStatus.completed
+                      ? ConnectionStatus.completed
+                      : (req.status == ExchangeStatus.accepted
+                          ? ConnectionStatus.connected
+                          : ConnectionStatus.pending);
+
+                  map[connId] = ConnectionModel(
+                    id: connId,
+                    userAId: req.userId,
+                    userBId: req.matchedUserId!,
+                    requestAId: req.id,
+                    requestBId: req.matchedRequestId!,
+                    userAName: req.userName,
+                    userBName: 'Exchange Partner',
+                    userAHas: req.has,
+                    userBHas: req.wants,
+                    amount: req.amount,
+                    location: req.location,
+                    status: status,
+                    userAAccepted: req.userAccepted,
+                    userBAccepted: req.matchedUserAccepted,
+                    userAConfirmed: req.userConfirmed,
+                    userBConfirmed: req.matchedUserConfirmed,
+                    createdAt: req.createdAt,
+                  );
+                }
+              }
+            }
+            requestConnections = map;
+            emitMerged();
           },
+          onError: (_) => emitMerged(),
+        );
+
+        // Backward compatibility: requests where user was matched by peer
+        subReqB = _requestsCol
+            .where('matchedUserId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            final Map<String, ConnectionModel> map = {};
+            for (final doc in snap.docs) {
+              final req = ExchangeRequestModel.fromFirestore(doc);
+              if (req.status == ExchangeStatus.matched ||
+                  req.status == ExchangeStatus.accepted ||
+                  req.status == ExchangeStatus.completed) {
+                final connId = req.connectionId ??
+                    getConnectionId(req.id, req.matchedRequestId ?? doc.id);
+                final status = req.status == ExchangeStatus.completed
+                    ? ConnectionStatus.completed
+                    : (req.status == ExchangeStatus.accepted
+                        ? ConnectionStatus.connected
+                        : ConnectionStatus.pending);
+
+                map[connId] = ConnectionModel(
+                  id: connId,
+                  userAId: req.userId,
+                  userBId: userId,
+                  requestAId: req.id,
+                  requestBId: req.matchedRequestId ?? '',
+                  userAName: req.userName,
+                  userBName: 'Exchange Partner',
+                  userAHas: req.has,
+                  userBHas: req.wants,
+                  amount: req.amount,
+                  location: req.location,
+                  status: status,
+                  userAAccepted: req.userAccepted,
+                  userBAccepted: req.matchedUserAccepted,
+                  userAConfirmed: req.userConfirmed,
+                  userBConfirmed: req.matchedUserConfirmed,
+                  createdAt: req.createdAt,
+                );
+              }
+            }
+            requestBConnections = map;
+            emitMerged();
+          },
+          onError: (_) => emitMerged(),
+        );
+
+        // Backward compatibility: completed history
+        subExA = _exchangesCol
+            .where('userAId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            for (final doc in snap.docs) {
+              final ex = ExchangeModel.fromFirestore(doc);
+              historyConnections[ex.id] = ConnectionModel(
+                id: ex.id,
+                userAId: ex.userAId,
+                userBId: ex.userBId,
+                requestAId: ex.requestIdA ?? '',
+                requestBId: ex.requestIdB ?? '',
+                userAName: ex.userAName,
+                userBName: ex.userBName,
+                userAHas: ex.userAHas,
+                userBHas: ex.userBHas,
+                amount: ex.amount,
+                location: ex.location ?? 'Campus Cafeteria',
+                status: ConnectionStatus.completed,
+                userAAccepted: true,
+                userBAccepted: true,
+                userAConfirmed: true,
+                userBConfirmed: true,
+                createdAt: ex.createdAt,
+                completedAt: ex.completedAt,
+              );
+            }
+            emitMerged();
+          },
+          onError: (_) {},
+        );
+
+        subExB = _exchangesCol
+            .where('userBId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            for (final doc in snap.docs) {
+              final ex = ExchangeModel.fromFirestore(doc);
+              historyConnections[ex.id] = ConnectionModel(
+                id: ex.id,
+                userAId: ex.userAId,
+                userBId: ex.userBId,
+                requestAId: ex.requestIdA ?? '',
+                requestBId: ex.requestIdB ?? '',
+                userAName: ex.userAName,
+                userBName: ex.userBName,
+                userAHas: ex.userAHas,
+                userBHas: ex.userBHas,
+                amount: ex.amount,
+                location: ex.location ?? 'Campus Cafeteria',
+                status: ConnectionStatus.completed,
+                userAAccepted: true,
+                userBAccepted: true,
+                userAConfirmed: true,
+                userBConfirmed: true,
+                createdAt: ex.createdAt,
+                completedAt: ex.completedAt,
+              );
+            }
+            emitMerged();
+          },
+          onError: (_) {},
         );
       },
       onCancel: () {
         subA?.cancel();
         subB?.cancel();
+        subReq?.cancel();
+        subReqB?.cancel();
+        subExA?.cancel();
+        subExB?.cancel();
       },
     );
 
     return controller.stream;
   }
 
-  // 5. Stream single connection by ID
+  // 5. Stream single connection by ID (with fallback lookup)
   Stream<ConnectionModel?> streamConnection(String connectionId) {
-    return _connectionsCol.doc(connectionId).snapshots().map((doc) {
-      if (!doc.exists) return null;
-      return ConnectionModel.fromFirestore(doc);
-    });
+    late StreamController<ConnectionModel?> controller;
+    StreamSubscription? connSub;
+    StreamSubscription? reqSub;
+
+    controller = StreamController<ConnectionModel?>(
+      onListen: () {
+        connSub = _connectionsCol.doc(connectionId).snapshots().listen(
+          (doc) {
+            if (doc.exists) {
+              if (!controller.isClosed) {
+                controller.add(ConnectionModel.fromFirestore(doc));
+              }
+            } else {
+              // Fallback to checking request by ID pair (reqA_reqB)
+              final parts = connectionId.split('_');
+              if (parts.isNotEmpty) {
+                reqSub = _requestsCol.doc(parts[0]).snapshots().listen((rDoc) {
+                  if (rDoc.exists) {
+                    final req = ExchangeRequestModel.fromFirestore(rDoc);
+                    final status = req.status == ExchangeStatus.completed
+                        ? ConnectionStatus.completed
+                        : (req.status == ExchangeStatus.accepted
+                            ? ConnectionStatus.connected
+                            : ConnectionStatus.pending);
+
+                    final fallback = ConnectionModel(
+                      id: connectionId,
+                      userAId: req.userId,
+                      userBId: req.matchedUserId ?? '',
+                      requestAId: req.id,
+                      requestBId: req.matchedRequestId ??
+                          (parts.length > 1 ? parts[1] : ''),
+                      userAName: req.userName,
+                      userBName: 'Exchange Partner',
+                      userAHas: req.has,
+                      userBHas: req.wants,
+                      amount: req.amount,
+                      location: req.location,
+                      status: status,
+                      userAAccepted: req.userAccepted,
+                      userBAccepted: req.matchedUserAccepted,
+                      userAConfirmed: req.userConfirmed,
+                      userBConfirmed: req.matchedUserConfirmed,
+                      createdAt: req.createdAt,
+                    );
+                    if (!controller.isClosed) controller.add(fallback);
+                  } else {
+                    if (!controller.isClosed) controller.add(null);
+                  }
+                });
+              } else {
+                if (!controller.isClosed) controller.add(null);
+              }
+            }
+          },
+          onError: (e) {
+            if (!controller.isClosed) controller.add(null);
+          },
+        );
+      },
+      onCancel: () {
+        connSub?.cancel();
+        reqSub?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   // 6. Create an exchange request and proactively look for an exact match
@@ -144,12 +397,16 @@ class ExchangeService {
     }
 
     // Verify only one active searching/matched request per user
-    final existing = await _requestsCol
+    final existingDocs = await _requestsCol
         .where('userId', isEqualTo: userId)
-        .where('status', whereIn: ['searching', 'matched', 'accepted'])
         .get();
 
-    if (existing.docs.isNotEmpty) {
+    final hasActive = existingDocs.docs.any((d) {
+      final s = d.data()['status']?.toString().toLowerCase();
+      return s == 'searching' || s == 'matched' || s == 'accepted';
+    });
+
+    if (hasActive) {
       throw Exception(
           'You already have an active request. Please cancel your current request before creating another.');
     }

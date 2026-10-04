@@ -11,6 +11,7 @@ import '../../exchange/providers/exchange_provider.dart';
 import '../../exchange/screens/connection_details_screen.dart';
 import '../../exchange/screens/create_request_screen.dart';
 import '../../exchange/screens/searching_match_screen.dart';
+import '../../exchange/services/exchange_service.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -378,13 +379,19 @@ class HomeScreen extends ConsumerWidget {
               builder: (_) => SearchingMatchScreen(initialRequest: req),
             ),
           );
-        } else if (req.connectionId != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ConnectionDetailsScreen(connectionId: req.connectionId!),
-            ),
-          );
+        } else {
+          final connId = req.connectionId ??
+              (req.matchedRequestId != null
+                  ? ExchangeService.getConnectionId(req.id, req.matchedRequestId!)
+                  : null);
+          if (connId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ConnectionDetailsScreen(connectionId: connId),
+              ),
+            );
+          }
         }
       },
       child: Container(

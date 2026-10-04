@@ -157,7 +157,34 @@ class _ConnectionDetailsScreenState
     if (conn == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Connection Details')),
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Loading connection details...',
+                  style:
+                      TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => ref.invalidate(
+                      connectionByIdProvider(widget.connectionId)),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 

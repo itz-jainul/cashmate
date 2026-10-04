@@ -78,11 +78,15 @@ class ExchangeRequestModel {
   }
 
   factory ExchangeRequestModel.fromMap(Map<String, dynamic> data, String id) {
-    DateTime parseDate(dynamic val) {
+    DateTime parseDate(dynamic val, [DateTime? fallback]) {
       if (val is Timestamp) return val.toDate();
-      if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
-      return DateTime.now();
+      if (val is String) return DateTime.tryParse(val) ?? (fallback ?? DateTime.now());
+      return fallback ?? DateTime.now();
     }
+
+    final createdAtDate = parseDate(data['createdAt']);
+    final updatedAtDate = parseDate(data['updatedAt'], createdAtDate);
+    final expiresAtDate = parseDate(data['expiresAt'], createdAtDate.add(const Duration(minutes: 60)));
 
     return ExchangeRequestModel(
       id: id,
@@ -100,9 +104,9 @@ class ExchangeRequestModel {
       matchedUserAccepted: data['matchedUserAccepted'] ?? false,
       userConfirmed: data['userConfirmed'] ?? false,
       matchedUserConfirmed: data['matchedUserConfirmed'] ?? false,
-      createdAt: parseDate(data['createdAt']),
-      updatedAt: parseDate(data['updatedAt']),
-      expiresAt: parseDate(data['expiresAt']),
+      createdAt: createdAtDate,
+      updatedAt: updatedAtDate,
+      expiresAt: expiresAtDate,
     );
   }
 
