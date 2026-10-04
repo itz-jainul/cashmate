@@ -43,6 +43,7 @@ service cloud.firestore {
     // Only participants can read or create completed records
     match /exchanges/{exchangeId} {
       allow read: if isAuthenticated() && (
+        (resource.data.participantIds != null && request.auth.uid in resource.data.participantIds) ||
         resource.data.userAId == request.auth.uid || 
         resource.data.userBId == request.auth.uid
       );

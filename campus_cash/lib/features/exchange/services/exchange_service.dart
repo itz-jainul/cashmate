@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/exchange_model.dart';
 import '../../../models/exchange_request_model.dart';
@@ -375,14 +376,60 @@ class ExchangeService {
 
   // Stream completed/cancelled exchanges for History
   Stream<List<ExchangeModel>> streamUserHistory(String userId) {
-    return _exchangesCol
-        .where('participantIds', arrayContains: userId)
-        .snapshots()
-        .map((snap) {
-      final list = snap.docs.map((doc) => ExchangeModel.fromFirestore(doc)).toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list;
-    });
+    late StreamController<List<ExchangeModel>> controller;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subA;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subB;
+
+    Map<String, ExchangeModel> userAExchanges = {};
+    Map<String, ExchangeModel> userBExchanges = {};
+
+    void emitMerged() {
+      final all = {...userAExchanges, ...userBExchanges}.values.toList();
+      all.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!controller.isClosed) {
+        controller.add(all);
+      }
+    }
+
+    controller = StreamController<List<ExchangeModel>>(
+      onListen: () {
+        subA = _exchangesCol
+            .where('userAId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            userAExchanges = {
+              for (var doc in snap.docs) doc.id: ExchangeModel.fromFirestore(doc)
+            };
+            emitMerged();
+          },
+          onError: (e) {
+            if (!controller.isClosed) controller.addError(e);
+          },
+        );
+
+        subB = _exchangesCol
+            .where('userBId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            userBExchanges = {
+              for (var doc in snap.docs) doc.id: ExchangeModel.fromFirestore(doc)
+            };
+            emitMerged();
+          },
+          onError: (e) {
+            if (!controller.isClosed) controller.addError(e);
+          },
+        );
+      },
+      onCancel: () {
+        subA?.cancel();
+        subB?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   // Stream notifications
