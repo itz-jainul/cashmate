@@ -78,8 +78,16 @@ class _MeetupChatWidgetState extends ConsumerState<MeetupChatWidget> {
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
+        final isPermission = e.toString().toLowerCase().contains('permission-denied');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send: ${e.toString()}')),
+          SnackBar(
+            backgroundColor: AppColors.statusCancelled,
+            content: Text(
+              isPermission
+                  ? 'Permission Denied: Publish updated firestore.rules in Firebase Console to enable chat.'
+                  : 'Failed to send: ${e.toString()}',
+            ),
+          ),
         );
       }
     } finally {
@@ -198,12 +206,60 @@ class _MeetupChatWidgetState extends ConsumerState<MeetupChatWidget> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 ),
-                error: (err, _) => Center(
-                  child: Text(
-                    'Error loading chat: $err',
-                    style: const TextStyle(fontSize: 12, color: AppColors.statusCancelled),
-                  ),
-                ),
+                error: (err, _) {
+                  final isPermission =
+                      err.toString().toLowerCase().contains('permission-denied');
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            isPermission
+                                ? Icons.security_rounded
+                                : Icons.error_outline_rounded,
+                            color: AppColors.statusCancelled,
+                            size: 26,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            isPermission
+                                ? 'Missing Firestore Permissions'
+                                : 'Unable to load chat',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.statusCancelled,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            isPermission
+                                ? 'Please publish the updated firestore.rules in Firebase Console.'
+                                : err.toString(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                ref.invalidate(chatMessagesProvider(widget.chatId)),
+                            icon: const Icon(Icons.refresh_rounded, size: 14),
+                            label: const Text('Retry', style: TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
                 data: (messages) {
                   if (messages.isEmpty) {
                     return Center(

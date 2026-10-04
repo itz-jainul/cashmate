@@ -62,9 +62,8 @@ service cloud.firestore {
     }
 
     // 5. Exchange Meetup Coordination Chat
-    match /exchangeChats/{chatId}/messages/{messageId} {
-      allow read, create: if isAuthenticated();
-      allow update, delete: if false;
+    match /exchangeChats/{chatId}/{document=**} {
+      allow read, write: if isAuthenticated();
     }
   }
 }
