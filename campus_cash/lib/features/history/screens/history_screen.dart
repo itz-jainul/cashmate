@@ -82,6 +82,19 @@ class HistoryScreen extends ConsumerWidget {
                                 'With ${item.userBName}',
                                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                               ),
+                              if (item.location != null) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.place_outlined, size: 13, color: AppColors.textMuted),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      item.location!,
+                                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ),

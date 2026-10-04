@@ -43,6 +43,7 @@ class ExchangeService {
     required String has,
     required String wants,
     required int amount,
+    String location = 'Campus Cafeteria',
   }) async {
     // 1. Verify no existing active request
     final existing = await _requestsCol
@@ -65,6 +66,7 @@ class ExchangeService {
       has: has,
       wants: wants,
       amount: amount,
+      location: location,
       status: ExchangeStatus.searching,
       createdAt: now,
       updatedAt: now,
@@ -287,6 +289,7 @@ class ExchangeService {
           amount: (myData['amount'] as num).toInt(),
           userAHas: myData['has'] as String,
           userBHas: partnerData['has'] as String,
+          location: myData['location'] as String? ?? 'Campus Cafeteria',
           status: 'completed',
           userAConfirmed: true,
           userBConfirmed: true,
@@ -317,6 +320,26 @@ class ExchangeService {
         });
       }
     });
+  }
+
+  // Update agreed meetup location
+  Future<void> updateMeetupLocation({
+    required String requestId,
+    String? matchedRequestId,
+    required String newLocation,
+  }) async {
+    final batch = _firestore.batch();
+    batch.update(_requestsCol.doc(requestId), {
+      'location': newLocation,
+      'updatedAt': Timestamp.now(),
+    });
+    if (matchedRequestId != null) {
+      batch.update(_requestsCol.doc(matchedRequestId), {
+        'location': newLocation,
+        'updatedAt': Timestamp.now(),
+      });
+    }
+    await batch.commit();
   }
 
   // Cancel Request

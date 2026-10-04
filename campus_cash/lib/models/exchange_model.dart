@@ -11,6 +11,7 @@ class ExchangeModel {
   final int amount;
   final String userAHas;
   final String userBHas;
+  final String? location;
   final String status; // 'completed' | 'cancelled'
   final bool userAConfirmed;
   final bool userBConfirmed;
@@ -28,6 +29,7 @@ class ExchangeModel {
     required this.amount,
     required this.userAHas,
     required this.userBHas,
+    this.location,
     required this.status,
     this.userAConfirmed = false,
     this.userBConfirmed = false,
@@ -58,6 +60,7 @@ class ExchangeModel {
       amount: (data['amount'] as num?)?.toInt() ?? 0,
       userAHas: data['userAHas'] ?? 'cash',
       userBHas: data['userBHas'] ?? 'digital',
+      location: data['location'],
       status: data['status'] ?? 'completed',
       userAConfirmed: data['userAConfirmed'] ?? false,
       userBConfirmed: data['userBConfirmed'] ?? false,
@@ -77,6 +80,7 @@ class ExchangeModel {
       'amount': amount,
       'userAHas': userAHas,
       'userBHas': userBHas,
+      'location': location,
       'status': status,
       'userAConfirmed': userAConfirmed,
       'userBConfirmed': userBConfirmed,

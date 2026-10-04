@@ -19,10 +19,21 @@ class CreateRequestScreen extends ConsumerStatefulWidget {
 class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   late String _has;
   final _amountController = TextEditingController();
+  final _customLocationController = TextEditingController();
   final List<int> _presetAmounts = [100, 200, 500, 1000, 2000];
   int? _selectedPreset;
+  String _selectedLocation = 'Campus Cafeteria';
+  bool _isCustomLocation = false;
   bool _isLoading = false;
   String? _errorMessage;
+
+  final List<Map<String, dynamic>> _presetLocations = [
+    {'name': 'Campus Cafeteria', 'icon': Icons.local_cafe_outlined},
+    {'name': 'Library Lobby', 'icon': Icons.local_library_outlined},
+    {'name': 'Student Center (SAC)', 'icon': Icons.groups_outlined},
+    {'name': 'Main Academic Block', 'icon': Icons.school_outlined},
+    {'name': 'Campus ATM Counter', 'icon': Icons.local_atm_outlined},
+  ];
 
   @override
   void initState() {
@@ -33,6 +44,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   @override
   void dispose() {
     _amountController.dispose();
+    _customLocationController.dispose();
     super.dispose();
   }
 
@@ -59,6 +71,10 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       return;
     }
 
+    final chosenLocation = _isCustomLocation && _customLocationController.text.trim().isNotEmpty
+        ? _customLocationController.text.trim()
+        : _selectedLocation;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -77,6 +93,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
         has: _has,
         wants: _wants,
         amount: amount,
+        location: chosenLocation,
       );
 
       if (mounted) {
@@ -156,8 +173,8 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      isCash ? Icons.swap_horiz : Icons.swap_horiz,
+                    const Icon(
+                      Icons.swap_horiz,
                       color: AppColors.primary,
                       size: 28,
                     ),
@@ -248,8 +265,98 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                   });
                 },
               ),
+              const SizedBox(height: 28),
+
+              // 3. Meetup Location Selection
+              const Text(
+                '3. Choose Exchange Place',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Select a safe public landmark on campus to meet your partner.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ..._presetLocations.map((loc) {
+                    final isSelected = !_isCustomLocation && _selectedLocation == loc['name'];
+                    return FilterChip(
+                      avatar: Icon(
+                        loc['icon'] as IconData,
+                        size: 16,
+                        color: isSelected ? Colors.white : AppColors.primary,
+                      ),
+                      label: Text(
+                        loc['name'] as String,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? Colors.white : AppColors.textPrimary,
+                        ),
+                      ),
+                      selected: isSelected,
+                      selectedColor: AppColors.primary,
+                      backgroundColor: Colors.white,
+                      side: BorderSide(
+                        color: isSelected ? AppColors.primary : AppColors.border,
+                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      onSelected: (_) {
+                        setState(() {
+                          _isCustomLocation = false;
+                          _selectedLocation = loc['name'] as String;
+                        });
+                      },
+                    );
+                  }),
+                  FilterChip(
+                    avatar: Icon(
+                      Icons.edit_location_alt_outlined,
+                      size: 16,
+                      color: _isCustomLocation ? Colors.white : AppColors.primary,
+                    ),
+                    label: Text(
+                      'Other Location',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _isCustomLocation ? Colors.white : AppColors.textPrimary,
+                      ),
+                    ),
+                    selected: _isCustomLocation,
+                    selectedColor: AppColors.primary,
+                    backgroundColor: Colors.white,
+                    side: BorderSide(
+                      color: _isCustomLocation ? AppColors.primary : AppColors.border,
+                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    onSelected: (_) {
+                      setState(() {
+                        _isCustomLocation = true;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              if (_isCustomLocation) ...[
+                const SizedBox(height: 14),
+                CustomTextField(
+                  controller: _customLocationController,
+                  hintText: 'e.g. Near Mechanical Workshop or Gate 2',
+                  prefixIcon: const Icon(Icons.place_outlined, color: AppColors.primary),
+                ),
+              ],
+
               if (_errorMessage != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Text(
                   _errorMessage!,
                   style: const TextStyle(color: AppColors.statusCancelled, fontSize: 13),

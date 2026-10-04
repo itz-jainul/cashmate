@@ -36,6 +36,7 @@ class ExchangeRequestModel {
   final String has; // 'cash' or 'digital'
   final String wants; // 'cash' or 'digital'
   final int amount;
+  final String location; // Preferred exchange meetup spot
   final ExchangeStatus status;
   final String? matchedUserId;
   final String? matchedRequestId;
@@ -54,6 +55,7 @@ class ExchangeRequestModel {
     required this.has,
     required this.wants,
     required this.amount,
+    this.location = 'Campus Cafeteria',
     this.status = ExchangeStatus.searching,
     this.matchedUserId,
     this.matchedRequestId,
@@ -87,6 +89,7 @@ class ExchangeRequestModel {
       has: data['has'] ?? 'cash',
       wants: data['wants'] ?? 'digital',
       amount: (data['amount'] as num?)?.toInt() ?? 0,
+      location: data['location'] ?? 'Campus Cafeteria',
       status: ExchangeStatus.fromString(data['status']),
       matchedUserId: data['matchedUserId'],
       matchedRequestId: data['matchedRequestId'],
@@ -107,6 +110,7 @@ class ExchangeRequestModel {
       'has': has,
       'wants': wants,
       'amount': amount,
+      'location': location,
       'status': status.value,
       'matchedUserId': matchedUserId,
       'matchedRequestId': matchedRequestId,
@@ -127,6 +131,7 @@ class ExchangeRequestModel {
     String? has,
     String? wants,
     int? amount,
+    String? location,
     ExchangeStatus? status,
     String? matchedUserId,
     String? matchedRequestId,
@@ -145,6 +150,7 @@ class ExchangeRequestModel {
       has: has ?? this.has,
       wants: wants ?? this.wants,
       amount: amount ?? this.amount,
+      location: location ?? this.location,
       status: status ?? this.status,
       matchedUserId: matchedUserId ?? this.matchedUserId,
       matchedRequestId: matchedRequestId ?? this.matchedRequestId,

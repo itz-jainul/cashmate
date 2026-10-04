@@ -40,6 +40,56 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
     }
   }
 
+  Future<void> _showChangeLocationDialog(ExchangeRequestModel req) async {
+    final spots = [
+      'Campus Cafeteria',
+      'Library Lobby',
+      'Student Center (SAC)',
+      'Main Academic Block',
+      'Campus ATM Counter',
+    ];
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Change Meetup Place'),
+        children: spots.map((spot) {
+          final isCurr = spot == req.location;
+          return SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, spot),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.place_rounded,
+                  color: isCurr ? AppColors.primary : AppColors.textMuted,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    spot,
+                    style: TextStyle(
+                      fontWeight: isCurr ? FontWeight.w700 : FontWeight.w500,
+                      color: isCurr ? AppColors.primary : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                if (isCurr) const Icon(Icons.check, color: AppColors.primary, size: 18),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+
+    if (selected != null && selected != req.location) {
+      await ref.read(exchangeServiceProvider).updateMeetupLocation(
+        requestId: req.id,
+        matchedRequestId: req.matchedRequestId,
+        newLocation: selected,
+      );
+    }
+  }
+
   Future<void> _handleConfirm(ExchangeRequestModel req) async {
     if (req.matchedRequestId == null) return;
     final user = ref.read(authStateProvider).value;
@@ -258,6 +308,64 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+              // Designated Meetup Location Card
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryContainer,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.location_on_rounded,
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Meetup Place',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              req.location,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (req.status != ExchangeStatus.completed)
+                        TextButton.icon(
+                          onPressed: () => _showChangeLocationDialog(req),
+                          icon: const Icon(Icons.edit_location_alt_outlined, size: 16),
+                          label: const Text('Change'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
               // Step-by-Step Offline Guidance (Phases 14 & 15)
               if (isAccepted) ...[
@@ -272,8 +380,8 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
                 const SizedBox(height: 12),
                 _buildInstructionItem(
                   step: '1',
-                  title: 'Meet in a Safe Public Location',
-                  subtitle: 'E.g., Campus cafeteria, library lobby, or student center.',
+                  title: 'Meet at ${req.location}',
+                  subtitle: 'Head to the designated meetup spot to meet your exchange partner.',
                 ),
                 _buildInstructionItem(
                   step: '2',
