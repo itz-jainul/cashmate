@@ -21,5 +21,5 @@ final userProfileProvider = StreamProvider<UserModel?>((ref) {
   }
 
   final authService = ref.watch(authServiceProvider);
-  return Stream.fromFuture(authService.getUserProfile(user.uid));
+  return authService.streamUserProfile(user.uid);
 });

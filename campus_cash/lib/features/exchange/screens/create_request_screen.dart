@@ -9,8 +9,9 @@ import '../providers/exchange_provider.dart';
 
 class CreateRequestScreen extends ConsumerStatefulWidget {
   final String? initialHas; // 'cash' or 'digital'
+  final int? initialAmount;
 
-  const CreateRequestScreen({super.key, this.initialHas});
+  const CreateRequestScreen({super.key, this.initialHas, this.initialAmount});
 
   @override
   ConsumerState<CreateRequestScreen> createState() => _CreateRequestScreenState();
@@ -39,6 +40,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   void initState() {
     super.initState();
     _has = widget.initialHas ?? 'cash';
+    if (widget.initialAmount != null && widget.initialAmount! > 0) {
+      _amountController.text = widget.initialAmount.toString();
+      if (_presetAmounts.contains(widget.initialAmount)) {
+        _selectedPreset = widget.initialAmount;
+      }
+    }
   }
 
   @override
@@ -101,7 +108,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _errorMessage = AppStrings.cleanError(e);
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);

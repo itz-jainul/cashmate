@@ -3,6 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../auth/providers/auth_provider.dart';
+import 'edit_profile_screen.dart';
+import 'notification_preferences_screen.dart';
+import 'privacy_security_screen.dart';
+import 'safety_guidelines_screen.dart';
+import '../../auth/screens/onboarding_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -119,8 +124,11 @@ class ProfileScreen extends ConsumerWidget {
                       icon: Icons.edit_outlined,
                       title: 'Edit Profile',
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Profile edit is synchronized with your account.')),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const EditProfileScreen(),
+                          ),
                         );
                       },
                     ),
@@ -128,19 +136,55 @@ class ProfileScreen extends ConsumerWidget {
                     _buildMenuItem(
                       icon: Icons.notifications_outlined,
                       title: 'Notification Preferences',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const NotificationPreferencesScreen(),
+                          ),
+                        );
+                      },
                     ),
                     const Divider(height: 1),
                     _buildMenuItem(
                       icon: Icons.security_outlined,
                       title: 'Privacy & Security Rules',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PrivacySecurityScreen(),
+                          ),
+                        );
+                      },
                     ),
                     const Divider(height: 1),
                     _buildMenuItem(
                       icon: Icons.help_outline,
                       title: 'CashMate Safety Guidelines',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SafetyGuidelinesScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _buildMenuItem(
+                      icon: Icons.auto_stories_outlined,
+                      title: 'How CashMate Works (Tour)',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const OnboardingScreen(isFromSettings: true),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

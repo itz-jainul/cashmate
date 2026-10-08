@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../models/exchange_request_model.dart';
@@ -34,7 +35,10 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
+          SnackBar(
+            backgroundColor: AppColors.statusCancelled,
+            content: Text(AppStrings.cleanError(e)),
+          ),
         );
       }
     } finally {
@@ -130,7 +134,10 @@ class _MatchDetailsScreenState extends ConsumerState<MatchDetailsScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${e.toString()}')),
+            SnackBar(
+              backgroundColor: AppColors.statusCancelled,
+              content: Text(AppStrings.cleanError(e)),
+            ),
           );
         }
       } finally {

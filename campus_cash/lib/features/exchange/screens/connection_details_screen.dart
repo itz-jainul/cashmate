@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../models/connection_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/exchange_provider.dart';
@@ -38,7 +39,7 @@ class _ConnectionDetailsScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.statusCancelled,
-            content: Text(e.toString().replaceAll('Exception: ', '')),
+            content: Text(AppStrings.cleanError(e)),
           ),
         );
       }
@@ -88,7 +89,7 @@ class _ConnectionDetailsScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.statusCancelled,
-            content: Text(e.toString().replaceAll('Exception: ', '')),
+            content: Text(AppStrings.cleanError(e)),
           ),
         );
       }
@@ -138,7 +139,7 @@ class _ConnectionDetailsScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.statusCancelled,
-            content: Text(e.toString().replaceAll('Exception: ', '')),
+            content: Text(AppStrings.cleanError(e)),
           ),
         );
       }

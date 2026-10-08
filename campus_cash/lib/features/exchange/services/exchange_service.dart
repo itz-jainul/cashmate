@@ -599,7 +599,7 @@ class ExchangeService {
       final targetExpiresAt = (targetData['expiresAt'] as Timestamp?)?.toDate();
 
       if (targetStatus != ExchangeStatus.searching.value) {
-        throw Exception('Request already matched.');
+        throw Exception('This request is no longer available.');
       }
 
       if (targetUserId == currentUserId) {
@@ -610,35 +610,70 @@ class ExchangeService {
         throw Exception('This exchange request has expired.');
       }
 
-      // 2. Check current user's existing searching request
-      final userActiveSnap = await _requestsCol
+      // 2. Check current user's existing requests
+      final userExistingSnap = await _requestsCol
           .where('userId', isEqualTo: currentUserId)
-          .where('status', isEqualTo: ExchangeStatus.searching.value)
           .get();
+
+      // Check if user is already in an ongoing active handshake/match
+      final hasOngoingMatch = userExistingSnap.docs.any((d) {
+        final s = d.data()['status']?.toString().toLowerCase();
+        return s == ExchangeStatus.matched.value ||
+            s == ExchangeStatus.accepted.value;
+      });
+
+      if (hasOngoingMatch) {
+        throw Exception(
+            'You already have an active exchange in progress. Please complete or cancel it first.');
+      }
+
+      final userSearchingDocs = userExistingSnap.docs.where((d) {
+        final s = d.data()['status']?.toString().toLowerCase();
+        return s == ExchangeStatus.searching.value;
+      }).toList();
 
       String myRequestId;
       String myLocation = targetData['location'] as String? ?? 'Campus Cafeteria';
+      final now = DateTime.now();
+      final updateTime = Timestamp.now();
 
-      if (userActiveSnap.docs.isNotEmpty) {
-        final myDoc = userActiveSnap.docs.first;
+      if (userSearchingDocs.isNotEmpty) {
+        final myDoc = userSearchingDocs.first;
         final myData = myDoc.data();
-
-        // Validate compatibility
-        if (myData['has'] != targetWants ||
-            myData['wants'] != targetHas ||
-            (myData['amount'] as num).toInt() != targetAmount) {
-          throw Exception(
-              'Your active request does not match this request direction or amount.');
-        }
 
         myRequestId = myDoc.id;
         myLocation = myData['location'] as String? ?? myLocation;
+
+        // Cancel any extra searching requests if they exist
+        for (int i = 1; i < userSearchingDocs.length; i++) {
+          transaction.update(userSearchingDocs[i].reference, {
+            'status': ExchangeStatus.cancelled.value,
+            'updatedAt': updateTime,
+          });
+        }
       } else {
-        // Create a matching request for current user
         final newReqRef = _requestsCol.doc();
         myRequestId = newReqRef.id;
-        final now = DateTime.now();
+      }
 
+      final connectionId = getConnectionId(myRequestId, targetRequestId);
+
+      if (userSearchingDocs.isNotEmpty) {
+        // Update existing search request to match this connection's terms
+        transaction.update(_requestsCol.doc(myRequestId), {
+          'has': targetWants,
+          'wants': targetHas,
+          'amount': targetAmount,
+          'status': ExchangeStatus.matched.value,
+          'matchedUserId': targetUserId,
+          'matchedRequestId': targetRequestId,
+          'connectionId': connectionId,
+          'userAccepted': false,
+          'matchedUserAccepted': false,
+          'updatedAt': updateTime,
+        });
+      } else {
+        // Create brand new matching request for current user
         final newReq = ExchangeRequestModel(
           id: myRequestId,
           userId: currentUserId,
@@ -648,28 +683,18 @@ class ExchangeService {
           amount: targetAmount,
           location: myLocation,
           status: ExchangeStatus.matched,
+          matchedUserId: targetUserId,
+          matchedRequestId: targetRequestId,
+          connectionId: connectionId,
           createdAt: now,
           updatedAt: now,
           expiresAt: now.add(const Duration(minutes: 30)),
         );
 
-        transaction.set(newReqRef, newReq.toMap());
+        transaction.set(_requestsCol.doc(myRequestId), newReq.toMap());
       }
 
-      final updateTime = Timestamp.now();
-      final connectionId = getConnectionId(myRequestId, targetRequestId);
-
-      // Update both requests to matched
-      transaction.update(_requestsCol.doc(myRequestId), {
-        'status': ExchangeStatus.matched.value,
-        'matchedUserId': targetUserId,
-        'matchedRequestId': targetRequestId,
-        'connectionId': connectionId,
-        'userAccepted': false,
-        'matchedUserAccepted': false,
-        'updatedAt': updateTime,
-      });
-
+      // Update target request to matched
       transaction.update(_requestsCol.doc(targetRequestId), {
         'status': ExchangeStatus.matched.value,
         'matchedUserId': currentUserId,
@@ -1090,6 +1115,28 @@ class ExchangeService {
         .snapshots()
         .map((snap) =>
             snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
+  }
+
+  // Mark single notification as read
+  Future<void> markNotificationAsRead(String notifId) async {
+    try {
+      await _notificationsCol.doc(notifId).update({'isRead': true});
+    } catch (_) {}
+  }
+
+  // Mark all notifications as read for a user
+  Future<void> markAllNotificationsAsRead(String userId) async {
+    try {
+      final unreadSnap = await _notificationsCol
+          .where('userId', isEqualTo: userId)
+          .where('isRead', isEqualTo: false)
+          .get();
+      final batch = _firestore.batch();
+      for (final doc in unreadSnap.docs) {
+        batch.update(doc.reference, {'isRead': true});
+      }
+      await batch.commit();
+    } catch (_) {}
   }
 
   // 16. Chat Subcollection

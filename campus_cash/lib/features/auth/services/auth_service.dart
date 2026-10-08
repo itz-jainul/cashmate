@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../models/user_model.dart';
 
 class AuthService {
@@ -20,6 +21,14 @@ class AuthService {
     final doc = await _firestore.collection('users').doc(uid).get();
     if (!doc.exists) return null;
     return UserModel.fromFirestore(doc);
+  }
+
+  Stream<UserModel?> streamUserProfile(String uid) {
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((doc) => doc.exists ? UserModel.fromFirestore(doc) : null);
   }
 
   Future<UserCredential> registerWithEmail({
@@ -63,15 +72,61 @@ class AuthService {
     );
   }
 
+  Future<UserCredential> signInWithGoogle() async {
+    final GoogleAuthProvider googleProvider = GoogleAuthProvider();
+    googleProvider.addScope('email');
+    googleProvider.addScope('profile');
+
+    UserCredential cred;
+    if (kIsWeb) {
+      cred = await _auth.signInWithPopup(googleProvider);
+    } else {
+      cred = await _auth.signInWithProvider(googleProvider);
+    }
+
+    final user = cred.user;
+    if (user != null) {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (!doc.exists) {
+        final userModel = UserModel(
+          userId: user.uid,
+          name: user.displayName ?? (user.email?.split('@').first ?? 'CashMate User'),
+          email: user.email ?? '',
+          completedExchanges: 0,
+          rating: 5.0,
+          isActive: true,
+          createdAt: DateTime.now(),
+        );
+
+        await _firestore.collection('users').doc(user.uid).set(userModel.toMap());
+      }
+    }
+
+    return cred;
+  }
+
   Future<void> sendPasswordResetEmail(String email) async {
     await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   Future<void> updateUserProfile(UserModel updatedUser) async {
+    final user = _auth.currentUser;
+    if (user != null && updatedUser.name.isNotEmpty && user.displayName != updatedUser.name) {
+      await user.updateDisplayName(updatedUser.name.trim());
+    }
     await _firestore
         .collection('users')
         .doc(updatedUser.userId)
         .update(updatedUser.toMap());
+  }
+
+  Future<void> updateNotificationPreferences(
+    String uid,
+    Map<String, bool> preferences,
+  ) async {
+    await _firestore.collection('users').doc(uid).update({
+      'notificationPreferences': preferences,
+    });
   }
 
   Future<void> signOut() async {

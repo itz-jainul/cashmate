@@ -27,4 +27,13 @@ class AppStrings {
   static const String completed = 'Exchange Completed';
   static const String cancelled = 'Cancelled';
   static const String expired = 'Expired';
+
+  /// Cleans runtime exception strings for user-friendly UI display
+  static String cleanError(Object? error) {
+    if (error == null) return '';
+    return error
+        .toString()
+        .replaceFirst(RegExp(r'^(Error:\s*)?(Dart\s+exception:\s*)?(Exception:\s*)?'), '')
+        .trim();
+  }
 }

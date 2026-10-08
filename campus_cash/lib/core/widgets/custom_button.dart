@@ -27,6 +27,7 @@ class CustomButton extends StatelessWidget {
       return OutlinedButton(
         onPressed: isLoading ? null : onPressed,
         style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
           side: BorderSide(
             color: backgroundColor ?? AppColors.border,
             width: 1.5,
@@ -40,6 +41,7 @@ class CustomButton extends StatelessWidget {
     return ElevatedButton(
       onPressed: isLoading ? null : onPressed,
       style: ElevatedButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
         backgroundColor: backgroundColor ?? AppColors.primary,
         foregroundColor: textColor ?? Colors.white,
       ),

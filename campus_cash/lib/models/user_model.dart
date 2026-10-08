@@ -10,6 +10,7 @@ class UserModel {
   final double rating;
   final bool isActive;
   final DateTime createdAt;
+  final Map<String, bool> notificationPreferences;
 
   const UserModel({
     required this.userId,
@@ -21,6 +22,12 @@ class UserModel {
     this.rating = 5.0,
     this.isActive = true,
     required this.createdAt,
+    this.notificationPreferences = const {
+      'matchAlerts': true,
+      'chatAlerts': true,
+      'statusAlerts': true,
+      'soundAlerts': true,
+    },
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -35,6 +42,23 @@ class UserModel {
       return DateTime.now();
     }
 
+    Map<String, bool> parsePreferences(dynamic val) {
+      if (val is Map) {
+        return {
+          'matchAlerts': val['matchAlerts'] == true || val['matchAlerts'] == null,
+          'chatAlerts': val['chatAlerts'] == true || val['chatAlerts'] == null,
+          'statusAlerts': val['statusAlerts'] == true || val['statusAlerts'] == null,
+          'soundAlerts': val['soundAlerts'] == true || val['soundAlerts'] == null,
+        };
+      }
+      return const {
+        'matchAlerts': true,
+        'chatAlerts': true,
+        'statusAlerts': true,
+        'soundAlerts': true,
+      };
+    }
+
     return UserModel(
       userId: id,
       name: data['name'] ?? '',
@@ -45,6 +69,7 @@ class UserModel {
       rating: (data['rating'] as num?)?.toDouble() ?? 5.0,
       isActive: data['isActive'] ?? true,
       createdAt: parseDate(data['createdAt']),
+      notificationPreferences: parsePreferences(data['notificationPreferences']),
     );
   }
 
@@ -58,6 +83,7 @@ class UserModel {
       'rating': rating,
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
+      'notificationPreferences': notificationPreferences,
     };
   }
 
@@ -70,6 +96,7 @@ class UserModel {
     double? rating,
     bool? isActive,
     DateTime? createdAt,
+    Map<String, bool>? notificationPreferences,
   }) {
     return UserModel(
       userId: userId,
@@ -81,6 +108,8 @@ class UserModel {
       rating: rating ?? this.rating,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
+      notificationPreferences:
+          notificationPreferences ?? this.notificationPreferences,
     );
   }
 }
