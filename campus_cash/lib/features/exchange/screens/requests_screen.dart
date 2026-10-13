@@ -9,6 +9,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../providers/exchange_provider.dart';
 import 'connection_details_screen.dart';
 import 'create_request_screen.dart';
+import 'searching_match_screen.dart';
 
 class RequestsScreen extends ConsumerStatefulWidget {
   const RequestsScreen({super.key});
@@ -363,15 +364,8 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
 
     final allRawRequests = publicRequestsAsync.value ?? [];
 
-    // Filter out user's own requests
-    final otherRequests = currentUserId != null
-        ? allRawRequests.where((r) => r.userId != currentUserId).toList()
-        : allRawRequests;
-
-    // Use demo items if Firestore is empty (for testing and offline demo)
-    final requestsToUse = otherRequests.isNotEmpty
-        ? otherRequests
-        : _getDemoRequests();
+    // All active public requests on campus, including user's own request
+    final requestsToUse = allRawRequests;
 
     // Compute filter counts
     final totalCount = requestsToUse.length;
@@ -395,8 +389,13 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
       return true;
     }).toList();
 
-    // Apply Sorting
+    // Apply Sorting (user's own active request is prioritized at the top)
     filtered.sort((a, b) {
+      final aIsOwn = currentUserId != null && a.userId == currentUserId;
+      final bIsOwn = currentUserId != null && b.userId == currentUserId;
+      if (aIsOwn && !bIsOwn) return -1;
+      if (!aIsOwn && bIsOwn) return 1;
+
       if (_sortIndex == 0) {
         // Nearest: simulated or location comparison
         return a.location.compareTo(b.location);
@@ -435,7 +434,7 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // Header: Title, Live Count, '+' Button
-                        _buildHeader(filtered.length),
+                        _buildHeader(filtered.length, myActiveReq),
                         const SizedBox(height: 16),
 
                         // Search Bar
@@ -456,7 +455,7 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
                   // 2. Request Cards List or Empty State
                   Expanded(
                     child: filtered.isEmpty
-                        ? _buildEmptyState()
+                        ? _buildEmptyState(myActiveReq)
                         : ListView.builder(
                             padding: const EdgeInsets.fromLTRB(18, 2, 18, 108),
                             physics: const AlwaysScrollableScrollPhysics(
@@ -464,24 +463,31 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
                             ),
                             itemCount: filtered.length,
                             itemBuilder: (context, index) {
-                                  final req = filtered[index];
-                                  final isExactMatch = myActiveReq != null &&
-                                      myActiveReq.status == ExchangeStatus.searching &&
-                                      myActiveReq.amount == req.amount &&
-                                      myActiveReq.has.toLowerCase() == req.wants.toLowerCase() &&
-                                      myActiveReq.wants.toLowerCase() == req.has.toLowerCase();
+                              final req = filtered[index];
+                              final isOwnRequest = currentUserId != null &&
+                                  req.userId == currentUserId;
+                              final isExactMatch = !isOwnRequest &&
+                                  myActiveReq != null &&
+                                  myActiveReq.status ==
+                                      ExchangeStatus.searching &&
+                                  myActiveReq.amount == req.amount &&
+                                  myActiveReq.has.toLowerCase() ==
+                                      req.wants.toLowerCase() &&
+                                  myActiveReq.wants.toLowerCase() ==
+                                      req.has.toLowerCase();
 
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: _buildRequestCard(
-                                      req: req,
-                                      isExactMatch: isExactMatch,
-                                      index: index,
-                                      myActiveReq: myActiveReq,
-                                    ),
-                                  );
-                                },
-                              ),
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: _buildRequestCard(
+                                  req: req,
+                                  isOwnRequest: isOwnRequest,
+                                  isExactMatch: isExactMatch,
+                                  index: index,
+                                  myActiveReq: myActiveReq,
+                                ),
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
@@ -493,7 +499,7 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
   }
 
   // --- 1. Header (Title, Count, '+' Add Button) ---
-  Widget _buildHeader(int count) {
+  Widget _buildHeader(int count, ExchangeRequestModel? myActiveReq) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -536,7 +542,9 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
                   ),
                   Expanded(
                     child: Text(
-                      '$count ${count == 1 ? "open request" : "open requests"} near you',
+                      count > 0
+                          ? '$count ${count == 1 ? "open request" : "open requests"} near you'
+                          : 'No active requests right now',
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppColors.mute,
@@ -555,6 +563,25 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
         // '+' Add Button
         GestureDetector(
           onTap: () {
+            if (myActiveReq != null &&
+                myActiveReq.status == ExchangeStatus.searching) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'You already have an active request in progress. Tap your request card to view status.',
+                  ),
+                  backgroundColor: AppColors.ink,
+                ),
+              );
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      SearchingMatchScreen(initialRequest: myActiveReq),
+                ),
+              );
+              return;
+            }
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CreateRequestScreen()),
@@ -754,6 +781,7 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
   // --- Request Card ---
   Widget _buildRequestCard({
     required ExchangeRequestModel req,
+    required bool isOwnRequest,
     required bool isExactMatch,
     required int index,
     required ExchangeRequestModel? myActiveReq,
@@ -764,214 +792,269 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
 
     final initial = req.userName.isNotEmpty ? req.userName[0].toUpperCase() : '?';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isExactMatch ? AppColors.jade : AppColors.line,
-          width: isExactMatch ? 2 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isExactMatch
-                ? AppColors.jade.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    return GestureDetector(
+      onTap: isOwnRequest
+          ? () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SearchingMatchScreen(initialRequest: req),
+                ),
+              );
+            }
+          : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: (isExactMatch || isOwnRequest) ? AppColors.jade : AppColors.line,
+            width: (isExactMatch || isOwnRequest) ? 2 : 1,
           ),
-        ],
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Exact Match Banner
-          if (isExactMatch && myActiveReq != null) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.okBg,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.check_rounded, size: 14, color: AppColors.jade),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Exact match for your ₹${myActiveReq.amount} request',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.jade,
-                    ),
-                  ),
-                ],
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: (isExactMatch || isOwnRequest)
+                  ? AppColors.jade.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
-
-          // Top Row: Avatar, Name, Location/Time, Amount
-          Row(
-            children: [
-              // Avatar Circle
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Your Request or Exact Match Banner
+            if (isOwnRequest) ...[
               Container(
-                width: 42,
-                height: 42,
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: palette[0],
-                  shape: BoxShape.circle,
+                  color: AppColors.okBg,
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                child: Center(
-                  child: Text(
-                    initial,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: palette[1],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Name & Location / Distance / Time
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    Icon(Icons.check_circle_rounded, size: 14, color: AppColors.jade),
+                    SizedBox(width: 5),
                     Text(
-                      req.userName,
-                      style: const TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      '${req.location} • ${_formatTimeAgo(req.createdAt)}',
-                      style: const TextStyle(
+                      'Your active request (Public)',
+                      style: TextStyle(
                         fontSize: 12.5,
-                        color: AppColors.mute,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.jade,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-
-              const SizedBox(width: 8),
-
-              // Amount
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  '₹${currencyFormat.format(req.amount)}',
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.ink,
-                    letterSpacing: -0.4,
-                  ),
+            ] else if (isExactMatch && myActiveReq != null) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.okBg,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_rounded, size: 14, color: AppColors.jade),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Exact match for your ₹${myActiveReq.amount} request',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.jade,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
 
-          // Bottom Row: Tag + Subtitle & 'Offer swap' Action Button
-          Row(
-            children: [
-              // Tag + Direction Subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isWantsCash ? AppColors.cashBg : AppColors.digitalBg,
-                        borderRadius: BorderRadius.circular(999),
+            // Top Row: Avatar, Name, Location/Time, Amount
+            Row(
+              children: [
+                // Avatar Circle
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: palette[0],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      initial,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: palette[1],
                       ),
-                      child: Text(
-                        isWantsCash ? 'Wants cash' : 'Wants digital',
-                        style: TextStyle(
-                          fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Name & Location / Distance / Time
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isOwnRequest ? '${req.userName} (You)' : req.userName,
+                        style: const TextStyle(
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w700,
-                          color: isWantsCash ? AppColors.amber : AppColors.dig,
+                          color: AppColors.ink,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      isWantsCash ? 'You give cash, get UPI' : 'You give UPI, get cash',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.mute,
+                      const SizedBox(height: 1),
+                      Text(
+                        '${req.location} • ${_formatTimeAgo(req.createdAt)}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.mute,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
 
-              // Offer Swap Button
-              SizedBox(
-                height: 40,
-                child: ElevatedButton(
-                  onPressed: _isConnecting
-                      ? null
-                      : () {
-                          if (req.id.startsWith('demo_')) {
-                            // Demo request tap -> open CreateRequestScreen with matching pair
+                const SizedBox(width: 8),
+
+                // Amount
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '₹${currencyFormat.format(req.amount)}',
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.ink,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Bottom Row: Tag + Subtitle & Action Button
+            Row(
+              children: [
+                // Tag + Direction Subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isWantsCash ? AppColors.cashBg : AppColors.digitalBg,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          isWantsCash ? 'Wants cash' : 'Wants digital',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isWantsCash ? AppColors.amber : AppColors.dig,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        isOwnRequest
+                            ? (isWantsCash
+                                ? 'You have digital, asking for cash'
+                                : 'You have cash, asking for digital')
+                            : (isWantsCash
+                                ? 'You give cash, get UPI'
+                                : 'You give UPI, get cash'),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.mute,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Action Button: View status (if own) or Offer swap (if other peer)
+                SizedBox(
+                  height: 40,
+                  child: isOwnRequest
+                      ? ElevatedButton.icon(
+                          onPressed: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => CreateRequestScreen(
-                                  initialHas: req.wants,
-                                  initialAmount: req.amount,
-                                ),
+                                builder: (_) =>
+                                    SearchingMatchScreen(initialRequest: req),
                               ),
                             );
-                          } else {
-                            _handleConnect(req);
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.ink,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(0, 40),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Offer swap',
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                          },
+                          icon: const Icon(Icons.radar_rounded, size: 16),
+                          label: const Text(
+                            'View status',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.jade,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 40),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            elevation: 0,
+                          ),
+                        )
+                      : ElevatedButton(
+                          onPressed: _isConnecting ? null : () => _handleConnect(req),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.ink,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 40),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'Offer swap',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   // --- Empty State ---
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(ExchangeRequestModel? myActiveReq) {
     final isQueryActive = _searchQuery.isNotEmpty;
     final isFilterActive = _filter != 'all';
 
@@ -1014,7 +1097,9 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
             Text(
               isQueryActive
                   ? 'Nothing found for “$_searchQuery”. Try another amount or name.'
-                  : 'Nobody is asking for ${_filter == 'cash' ? 'cash' : 'digital'} right now. Post yours and we will notify you when someone matches.',
+                  : _filter == 'all'
+                      ? 'No open exchange requests right now. Create your request to get matched!'
+                      : 'Nobody is asking for ${_filter == 'cash' ? 'cash' : 'digital'} right now. Post yours and we will notify you when someone matches.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 14,
@@ -1024,16 +1109,28 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
             ),
             const SizedBox(height: 24),
 
-            // Primary Post Button
+            // Primary Post / View Active Request Button
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const CreateRequestScreen()),
-                  );
+                  if (myActiveReq != null &&
+                      myActiveReq.status == ExchangeStatus.searching) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            SearchingMatchScreen(initialRequest: myActiveReq),
+                      ),
+                    );
+                  } else {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const CreateRequestScreen()),
+                    );
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.jade,
@@ -1043,9 +1140,12 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Post a request',
-                  style: TextStyle(
+                child: Text(
+                  myActiveReq != null &&
+                          myActiveReq.status == ExchangeStatus.searching
+                      ? 'View your active request'
+                      : 'Post a request',
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1072,85 +1172,5 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
         ),
       ),
     );
-  }
-
-  // --- Demo Requests matching the exact HTML prototype ---
-  List<ExchangeRequestModel> _getDemoRequests() {
-    final now = DateTime.now();
-    final expireTime = now.add(const Duration(hours: 1));
-    return [
-      ExchangeRequestModel(
-        id: 'demo_1',
-        userId: 'demo_user_1',
-        userName: 'Aarav S.',
-        has: 'digital',
-        wants: 'cash',
-        amount: 200,
-        location: '0.4 km • Campus Cafeteria',
-        createdAt: now.subtract(const Duration(minutes: 5)),
-        updatedAt: now.subtract(const Duration(minutes: 5)),
-        expiresAt: expireTime,
-      ),
-      ExchangeRequestModel(
-        id: 'demo_2',
-        userId: 'demo_user_2',
-        userName: 'Meera K.',
-        has: 'cash',
-        wants: 'digital',
-        amount: 500,
-        location: '0.9 km • Library Lobby',
-        createdAt: now.subtract(const Duration(minutes: 12)),
-        updatedAt: now.subtract(const Duration(minutes: 12)),
-        expiresAt: expireTime,
-      ),
-      ExchangeRequestModel(
-        id: 'demo_3',
-        userId: 'demo_user_3',
-        userName: 'Rahul D.',
-        has: 'digital',
-        wants: 'cash',
-        amount: 100,
-        location: '1.2 km • Student Center',
-        createdAt: now.subtract(const Duration(minutes: 20)),
-        updatedAt: now.subtract(const Duration(minutes: 20)),
-        expiresAt: expireTime,
-      ),
-      ExchangeRequestModel(
-        id: 'demo_4',
-        userId: 'demo_user_4',
-        userName: 'Fatima Z.',
-        has: 'cash',
-        wants: 'digital',
-        amount: 1000,
-        location: '1.8 km • Main Gate',
-        createdAt: now.subtract(const Duration(minutes: 35)),
-        updatedAt: now.subtract(const Duration(minutes: 35)),
-        expiresAt: expireTime,
-      ),
-      ExchangeRequestModel(
-        id: 'demo_5',
-        userId: 'demo_user_5',
-        userName: 'Karthik R.',
-        has: 'digital',
-        wants: 'cash',
-        amount: 300,
-        location: '2.1 km • Hostel Block 3',
-        createdAt: now.subtract(const Duration(minutes: 48)),
-        updatedAt: now.subtract(const Duration(minutes: 48)),
-        expiresAt: expireTime,
-      ),
-      ExchangeRequestModel(
-        id: 'demo_6',
-        userId: 'demo_user_6',
-        userName: 'Divya P.',
-        has: 'cash',
-        wants: 'digital',
-        amount: 50,
-        location: '2.6 km • Sports Complex',
-        createdAt: now.subtract(const Duration(minutes: 75)),
-        updatedAt: now.subtract(const Duration(minutes: 75)),
-        expiresAt: expireTime,
-      ),
-    ];
   }
 }

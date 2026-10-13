@@ -32,6 +32,7 @@ class DefaultFirebaseOptions {
     appId: '1:602323999202:android:517e42c83fbae1574ec1bb',
     messagingSenderId: '602323999202',
     projectId: 'money-exchange-6c417',
+    authDomain: 'money-exchange-6c417.firebaseapp.com',
     storageBucket: 'money-exchange-6c417.firebasestorage.app',
   );
 

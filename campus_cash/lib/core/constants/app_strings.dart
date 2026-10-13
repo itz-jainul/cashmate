@@ -31,9 +31,38 @@ class AppStrings {
   /// Cleans runtime exception strings for user-friendly UI display
   static String cleanError(Object? error) {
     if (error == null) return '';
-    return error
+    final raw = error
         .toString()
         .replaceFirst(RegExp(r'^(Error:\s*)?(Dart\s+exception:\s*)?(Exception:\s*)?'), '')
         .trim();
+
+    if (raw.contains('popup-closed-by-user')) {
+      return 'Google sign-in was cancelled before completion.';
+    }
+    if (raw.contains('user-not-found')) {
+      return 'No account found with this email address.';
+    }
+    if (raw.contains('wrong-password') || raw.contains('invalid-credential')) {
+      return 'Incorrect email or password. Please try again.';
+    }
+    if (raw.contains('email-already-in-use')) {
+      return 'An account already exists with this email address.';
+    }
+    if (raw.contains('network-request-failed')) {
+      return 'Network connection failed. Please check your internet connection.';
+    }
+    if (raw.contains('too-many-requests')) {
+      return 'Too many failed attempts. Please try again in a few minutes.';
+    }
+    if (raw.contains('invalid-email')) {
+      return 'Please enter a valid email address.';
+    }
+    if (raw.contains('weak-password')) {
+      return 'Password is too weak. Please use at least 8 characters.';
+    }
+
+    // Strip [prefix/code] if still present
+    final stripped = raw.replaceFirst(RegExp(r'^\[[^\]]+\]\s*'), '');
+    return stripped.isNotEmpty ? stripped : raw;
   }
 }

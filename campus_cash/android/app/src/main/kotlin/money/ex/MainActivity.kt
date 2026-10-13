@@ -1,4 +1,4 @@
-package com.example.campus_cash
+package money.ex
 
 import io.flutter.embedding.android.FlutterActivity
 

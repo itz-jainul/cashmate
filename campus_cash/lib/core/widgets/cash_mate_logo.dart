@@ -23,19 +23,14 @@ class CashMateLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconWidget = Container(
+    final iconWidget = SizedBox(
       width: iconSize,
       height: iconSize,
-      decoration: BoxDecoration(
-        color: primaryColor,
-        borderRadius: BorderRadius.circular(iconSize * (11.0 / 36.0)),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.swap_horiz_rounded,
-          color: Colors.white,
-          size: iconSize * 0.62,
-        ),
+      child: Image.asset(
+        'assets/images/cashmate_logo_transparent.png',
+        width: iconSize,
+        height: iconSize,
+        fit: BoxFit.contain,
       ),
     );
 

@@ -92,6 +92,19 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.statusCancelled),
         ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.statusCancelled, width: 2),
+        ),
+        prefixIconColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return AppColors.primary;
+          }
+          if (states.contains(WidgetState.error)) {
+            return AppColors.statusCancelled;
+          }
+          return AppColors.textMuted;
+        }),
         hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 15),
       ),
       navigationBarTheme: NavigationBarThemeData(

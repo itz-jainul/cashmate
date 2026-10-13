@@ -14,6 +14,10 @@ class CustomTextField extends StatelessWidget {
   final int maxLines;
   final bool readOnly;
   final String? initialValue;
+  final FocusNode? focusNode;
+  final TextInputAction? textInputAction;
+  final void Function(String)? onFieldSubmitted;
+  final Iterable<String>? autofillHints;
 
   const CustomTextField({
     super.key,
@@ -29,6 +33,10 @@ class CustomTextField extends StatelessWidget {
     this.maxLines = 1,
     this.readOnly = false,
     this.initialValue,
+    this.focusNode,
+    this.textInputAction,
+    this.onFieldSubmitted,
+    this.autofillHints,
   });
 
   @override
@@ -49,15 +57,22 @@ class CustomTextField extends StatelessWidget {
         ],
         TextFormField(
           controller: controller,
+          focusNode: focusNode,
           initialValue: initialValue,
           obscureText: obscureText,
           keyboardType: keyboardType,
+          textInputAction: textInputAction,
+          onFieldSubmitted: onFieldSubmitted,
+          autofillHints: autofillHints,
+          cursorColor: AppColors.primary,
+          cursorWidth: 2,
+          cursorRadius: const Radius.circular(2),
           validator: validator,
           onChanged: onChanged,
           maxLines: maxLines,
           readOnly: readOnly,
           style: const TextStyle(
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.w500,
             color: AppColors.textPrimary,
           ),

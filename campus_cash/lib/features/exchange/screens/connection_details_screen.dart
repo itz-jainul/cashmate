@@ -204,11 +204,15 @@ class _ConnectionDetailsScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Connection Details'),
+        title: const Text(
+          'Connection Details',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: _buildStatusPill(conn.status),
+            child: Center(child: _buildStatusPill(conn.status)),
           ),
         ],
       ),

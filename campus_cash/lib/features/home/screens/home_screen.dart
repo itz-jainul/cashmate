@@ -170,8 +170,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final connections = connectionsAsync.value ?? [];
     final notifs = notificationsAsync.value ?? [];
     final hasUnreadNotifs = notifs.any((n) => n['isRead'] != true);
-
-    final liveCount = publicRequests.isNotEmpty ? publicRequests.length : 14;
+    final otherRequests =
+        publicRequests.where((r) => r.userId != currentUserId).toList();
+    final liveCount = otherRequests.length;
 
     return Container(
       decoration: const BoxDecoration(
@@ -215,7 +216,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     const SizedBox(height: 26),
 
                     // 5. "Waiting near you" Section
-                    _buildWaitingNearYouSection(publicRequests, currentUserId),
+                    _buildWaitingNearYouSection(
+                      publicRequests,
+                      currentUserId,
+                      hasActiveRequest: activeReq != null &&
+                          activeReq.status == ExchangeStatus.searching,
+                    ),
                     const SizedBox(height: 26),
 
                     // 6. "Recent activity" Section
@@ -235,23 +241,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget _buildHeader(bool hasUnreadNotifs) {
     return Row(
       children: [
-        // Jade Logo Square
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.jade,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.swap_horiz_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
+        // CashMate 3D Logo
+        SizedBox(
+          width: 44,
+          height: 44,
+          child: Image.asset(
+            'assets/images/cashmate_logo_transparent.png',
+            fit: BoxFit.contain,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
 
         // Brand Text: CashMate
         Expanded(
@@ -393,6 +392,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   // --- 2. Live Pulse Banner ---
   Widget _buildLiveBanner(int liveCount) {
+    final bannerText = liveCount > 0
+        ? '$liveCount ${liveCount == 1 ? "person" : "people"} near you ready to swap'
+        : 'Instant cash & digital exchanges on campus';
     return Row(
       children: [
         AnimatedBuilder(
@@ -415,9 +417,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             );
           },
         ),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '$liveCount people near you are ready to swap',
+            bannerText,
             style: const TextStyle(
               fontSize: 14,
               color: AppColors.mute,
@@ -791,8 +794,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   // --- 4. "Waiting near you" Section ---
   Widget _buildWaitingNearYouSection(
     List<ExchangeRequestModel> publicRequests,
-    String currentUserId,
-  ) {
+    String currentUserId, {
+    bool hasActiveRequest = false,
+  }) {
     // Filter out user's own requests
     final otherRequests =
         publicRequests.where((r) => r.userId != currentUserId).toList();
@@ -834,102 +838,86 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ),
         const SizedBox(height: 10),
 
-        // Horizontal Carousel
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: otherRequests.isNotEmpty
-                ? otherRequests.take(6).map((req) {
-                    final isWantsCash = req.wants == 'cash';
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: _buildNearbyCard(
-                        amount: req.amount,
-                        subtitle:
-                            '${isWantsCash ? "Needs cash" : "Needs digital"} • ${req.location}',
-                        hasLabel: req.has == 'digital' ? 'Has digital' : 'Has cash',
-                        isDigitalTag: req.has == 'digital',
-                        onTap: () {
-                          // Tapping suggests matching: user gives what the other person wants!
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CreateRequestScreen(
-                                initialHas: req.wants,
-                                initialAmount: req.amount,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  }).toList()
-                : [
-                    // Demo sample cards directly from the HTML mockup
-                    Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: _buildNearbyCard(
-                        amount: 200,
-                        subtitle: 'Needs cash · 0.4 km',
-                        hasLabel: 'Has digital',
-                        isDigitalTag: true,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const CreateRequestScreen(
-                                initialHas: 'cash',
-                                initialAmount: 200,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: _buildNearbyCard(
-                        amount: 500,
-                        subtitle: 'Needs digital · 0.9 km',
-                        hasLabel: 'Has cash',
-                        isDigitalTag: false,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const CreateRequestScreen(
-                                initialHas: 'digital',
-                                initialAmount: 500,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: _buildNearbyCard(
-                        amount: 100,
-                        subtitle: 'Needs cash · 1.2 km',
-                        hasLabel: 'Has digital',
-                        isDigitalTag: true,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const CreateRequestScreen(
-                                initialHas: 'cash',
-                                initialAmount: 100,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+        // Horizontal Carousel or Clean Empty State
+        if (otherRequests.isNotEmpty)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: otherRequests.take(6).map((req) {
+                final isWantsCash = req.wants == 'cash';
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: _buildNearbyCard(
+                    amount: req.amount,
+                    subtitle:
+                        '${isWantsCash ? "Needs cash" : "Needs digital"} • ${req.location}',
+                    hasLabel: req.has == 'digital' ? 'Has digital' : 'Has cash',
+                    isDigitalTag: req.has == 'digital',
+                    onTap: () {
+                      // Tapping suggests matching: user gives what the other person wants!
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CreateRequestScreen(
+                            initialHas: req.wants,
+                            initialAmount: req.amount,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.explore_outlined,
+                    color: AppColors.jade,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'No active requests nearby',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  hasActiveRequest
+                      ? 'Your request is live on campus! We will match or notify you as soon as a peer connects.'
+                      : 'Post your request to connect with peers looking to exchange.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.mute,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1038,15 +1026,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
         // Activity Card Container
         Container(
+          width: double.infinity,
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: AppColors.line),
           ),
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: connections.isNotEmpty
-                ? connections.take(4).map((conn) {
+          child: connections.isNotEmpty
+              ? Column(
+                  children: connections.take(4).map((conn) {
                     final myGive = conn.myHas(currentUserId);
                     final isDigitalToCash = myGive == 'digital';
                     final isLast = conn == connections.take(4).last;
@@ -1070,47 +1059,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         );
                       },
                     );
-                  }).toList()
-                : [
-                    // Demo activity rows matching the HTML mockup
-                    _buildDemoActivityRow(
-                      arrowDown: true,
-                      amount: 100,
-                      subtitle: 'Digital to cash',
-                      statusText: 'Completed',
-                      statusType: 'ok',
-                      when: '12 Apr, 4:20 PM',
-                      showDivider: true,
-                    ),
-                    _buildDemoActivityRow(
-                      arrowDown: false,
-                      amount: 200,
-                      subtitle: 'Cash to digital',
-                      statusText: 'Finding match',
-                      statusType: 'pending',
-                      when: '11 Apr, 11:30 AM',
-                      showDivider: true,
-                    ),
-                    _buildDemoActivityRow(
-                      arrowDown: true,
-                      amount: 500,
-                      subtitle: 'Digital to cash',
-                      statusText: 'Completed',
-                      statusType: 'ok',
-                      when: '10 Apr, 2:15 PM',
-                      showDivider: true,
-                    ),
-                    _buildDemoActivityRow(
-                      arrowDown: false,
-                      amount: 300,
-                      subtitle: 'Cash to digital',
-                      statusText: 'Cancelled',
-                      statusType: 'cancelled',
-                      when: '8 Apr, 6:40 PM',
-                      showDivider: false,
-                    ),
-                  ],
-          ),
+                  }).toList(),
+                )
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryContainer,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.receipt_long_outlined,
+                          color: AppColors.jade,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'No exchange activity yet',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Your completed exchanges and active requests will appear here.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.mute,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
         ),
       ],
     );
@@ -1232,112 +1220,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ],
             ),
-          ),
-        ),
-        if (showDivider)
-          const Divider(height: 1, thickness: 1, color: AppColors.line),
-      ],
-    );
-  }
-
-  Widget _buildDemoActivityRow({
-    required bool arrowDown,
-    required int amount,
-    required String subtitle,
-    required String statusText,
-    required String statusType,
-    required String when,
-    required bool showDivider,
-  }) {
-    Color bg;
-    Color fg;
-    if (statusType == 'ok') {
-      bg = AppColors.okBg;
-      fg = AppColors.jade;
-    } else if (statusType == 'pending') {
-      bg = AppColors.cashBg;
-      fg = AppColors.amber;
-    } else {
-      bg = AppColors.redBg;
-      fg = AppColors.red;
-    }
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: arrowDown ? AppColors.digitalBg : AppColors.cashBg,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    arrowDown ? '↓' : '↑',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: arrowDown ? AppColors.dig : AppColors.amber,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '₹$amount',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.mute,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: bg,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      statusText,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: fg,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    when,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.mute,
-                    ),
-                  ),
-                ],
-              ),
-            ],
           ),
         ),
         if (showDivider)
